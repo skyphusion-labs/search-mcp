@@ -44,7 +44,7 @@ describe("reposForTargets", () => {
 
 describe("gitAuthArgs", () => {
   it("never echoes the raw token in serialized args", () => {
-    const token = "ghp_supersecretvalue123";
+    const token = "fake-test-token-not-a-ghp-credential";
     const args = gitAuthArgs(token);
     expect(JSON.stringify(args)).not.toContain(token);
   });
