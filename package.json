@@ -1,0 +1,26 @@
+{
+  "name": "search-mcp",
+  "version": "0.1.0",
+  "description": "Bearer-gated MCP server and streaming query Worker over Cloudflare AI Search, plus a git-to-R2 corpus sync toolkit.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:mcp": "wrangler dev -c wrangler.mcp.toml",
+    "deploy": "wrangler deploy",
+    "deploy:mcp": "wrangler deploy -c wrangler.mcp.toml",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "sync": "node scripts/sync.mjs corpus",
+    "sync:dry": "node scripts/sync.mjs corpus --dry-run",
+    "sync:run": "node scripts/sync-runner.mjs"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@cloudflare/workers-types": "^4.20260606.1",
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.103.0"
+  }
+}

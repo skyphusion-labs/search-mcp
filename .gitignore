@@ -1,0 +1,10 @@
+node_modules/
+.wrangler/
+.corpus/
+dist/
+coverage/
+targets.json
+wrangler.toml
+wrangler.mcp.toml
+*.log
+.DS_Store
