@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/skyphusion-labs/search-mcp/security
+    about: >
+      Report vulnerabilities privately via the Security tab (Report a vulnerability)
+      or security@skyphusion.org. See SECURITY.md.
+  - name: Cloudflare AI Search docs
+    url: https://developers.cloudflare.com/ai-search/
+    about: Product documentation for the underlying AI Search service.
