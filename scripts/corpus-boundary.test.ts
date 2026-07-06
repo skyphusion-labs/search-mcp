@@ -1,0 +1,58 @@
+import { describe, it, expect, vi } from "vitest";
+import {
+  publicRestrictedOverlap,
+  assertPublicCorpusBoundary,
+  verifyGithubRepoVisibility,
+  assertPublicGithubVisibility,
+} from "./corpus-boundary.mjs";
+
+describe("publicRestrictedOverlap", () => {
+  it("returns repos in both lists", () => {
+    expect(publicRestrictedOverlap(["a", "b", "c"], ["b", "d"])).toEqual(["b"]);
+  });
+});
+
+describe("assertPublicCorpusBoundary", () => {
+  it("no-ops for non-public targets", () => {
+    expect(() =>
+      assertPublicCorpusBoundary(
+        { restrictedRepos: ["x"], targets: { public: { repos: ["x"] } } },
+        "corpus",
+      ),
+    ).not.toThrow();
+  });
+
+  it("throws when public target overlaps restrictedRepos", () => {
+    expect(() =>
+      assertPublicCorpusBoundary(
+        {
+          restrictedRepos: ["secret-repo"],
+          targets: { public: { repos: ["secret-repo", "open-repo"] } },
+        },
+        "public",
+      ),
+    ).toThrow(/public corpus boundary violation/);
+  });
+});
+
+describe("verifyGithubRepoVisibility", () => {
+  it("skips when no token", async () => {
+    const r = await verifyGithubRepoVisibility(["open-repo"], { org: "acme", token: "" });
+    expect(r.skipped).toBe(true);
+  });
+
+  it("flags private repos", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/open-repo")) {
+        return new Response(JSON.stringify({ visibility: "public", private: false }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ visibility: "private", private: true }), { status: 200 });
+    });
+    const r = await verifyGithubRepoVisibility(["open-repo", "secret-repo"], {
+      org: "acme",
+      token: "test-token",
+      fetchImpl,
+    });
+    expect(r.nonPublic.map((x) => x.repo)).toEqual(["secret-repo"]);
+  });
+});

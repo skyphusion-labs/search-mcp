@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy to targets.json and edit. repos are directory names under SYNC_REPO_ROOT (default: parent of this repo). Only git-tracked files are uploaded.",
+  "excludePaths": {
+    "example-repo": ["vendor/private-notes/"]
+  },
+  "restrictedRepos": [],
+  "targets": {
+    "corpus": {
+      "instance": "my-ai-search-instance",
+      "bucket": "my-search-corpus",
+      "repos": ["example-repo"]
+    }
+  }
+}
