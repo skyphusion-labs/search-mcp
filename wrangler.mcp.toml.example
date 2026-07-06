@@ -1,0 +1,23 @@
+# search-mcp bearer-gated MCP Worker (wrangler.mcp.toml example)
+#
+# Copy to wrangler.mcp.toml and edit instance_name / routes before deploy.
+# Set the gate secret with:
+#   wrangler secret put MCP_TOKEN -c wrangler.mcp.toml
+
+name = "search-mcp"
+main = "src/mcp.ts"
+compatibility_date = "2026-03-27"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[[ai_search]]
+binding = "SEARCH"
+instance_name = "my-ai-search-instance"
+# remote = true   # uncomment for `wrangler dev`
+
+# Optional custom domain (or use workers.dev):
+# [[routes]]
+# pattern = "mcp-search.example.com"
+# custom_domain = true

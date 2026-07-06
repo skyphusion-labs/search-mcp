@@ -1,0 +1,20 @@
+# Optional CI snippet: notify your search-mcp repo to resync after a merge to main.
+# Copy the job block into a source repo's .github/workflows/ci.yml.
+# Fire-and-forget; never gates the build. Requires a PAT with repo dispatch write
+# on the search-mcp repository (store as CORPUS_DISPATCH_TOKEN in the source repo).
+
+  notify-corpus-sync:
+    if: github.event_name == push && github.ref == refs/heads/main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger corpus resync
+        env:
+          DISPATCH_TOKEN: ${{ secrets.CORPUS_DISPATCH_TOKEN }}
+          SEARCH_REPO: your-org/search-mcp
+        run: |
+          curl -sSf -X POST \
+            -H "Authorization: Bearer $DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${SEARCH_REPO}/dispatches" \
+            -d "{\"event_type\":\"corpus-sync\",\"client_payload\":{\"repo\":\"${{ github.repository }}\",\"sha\":\"${{ github.sha }}\"}}"

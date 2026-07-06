@@ -1,0 +1,35 @@
+# search-mcp query Worker (wrangler.toml example)
+#
+# Copy to wrangler.toml and edit instance_name, routes, and vars before deploy.
+# account_id is read from CLOUDFLARE_ACCOUNT_ID (env / CI secret).
+
+name = "search-mcp-query"
+main = "src/index.ts"
+compatibility_date = "2026-03-27"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[[ai_search]]
+binding = "SEARCH"
+instance_name = "my-ai-search-instance"
+# remote = true   # uncomment for `wrangler dev`
+
+[[ratelimits]]
+name = "ASK_LIMITER"
+namespace_id = "1"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[vars]
+ALLOWED_ORIGINS = "https://docs.example.com,https://www.docs.example.com"
+GENERATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# ASSISTANT_SYSTEM_PROMPT = "You are the docs assistant for Example Corp..."
+
+# Optional custom domain (or use workers.dev):
+# [[routes]]
+# pattern = "search.example.com"
+# custom_domain = true
