@@ -1,5 +1,9 @@
 # search-mcp
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Typecheck](https://github.com/skyphusion-labs/search-mcp/actions/workflows/typecheck.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/typecheck.yml)
+[![CI](https://github.com/skyphusion-labs/search-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/ci.yml)
+
 Open-source toolkit for [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/):
 
 1. **MCP Worker** (`src/mcp.ts`) -- bearer-gated Streamable-HTTP MCP with a `search` tool for agents.
@@ -88,3 +92,9 @@ Copy `public/ask-widget.js` and `public/ask-widget.css` to your docs site:
 ## License
 
 AGPL-3.0-only. See [LICENSE](LICENSE).
+
+## Community
+
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)

@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in the Workers, sync scripts, or widget misbehaves
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        search-mcp: Cloudflare AI Search MCP server, /ask query Worker, and git-to-R2
+        corpus sync. Do not paste secrets (MCP_TOKEN, R2 keys, Turnstile secrets).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Deploy with ...
+        2. Call POST /mcp with ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Component
+      options:
+        - MCP Worker (/mcp)
+        - Query Worker (/ask)
+        - Ask widget (public/)
+        - Corpus sync (scripts/)
+        - CI / docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: `git rev-parse HEAD` or release tag if known.
+    validations:
+      required: false
