@@ -43,6 +43,41 @@ export function assertGithubSlug(slug, kind) {
   return slug;
 }
 
+const GITHUB_API_HEADERS = (token) => ({
+  Accept: "application/vnd.github+json",
+  Authorization: `Bearer ${token}`,
+  "X-GitHub-Api-Version": "2022-11-28",
+  "User-Agent": "search-mcp-corpus-boundary",
+});
+
+/** Paginated org repo list; URL uses only the org slug (env), never targets.json repo names. */
+async function fetchPublicRepoNames(org, token, fetchImpl) {
+  const names = new Set();
+  let page = 1;
+  while (true) {
+    const url = new URL(`/orgs/${org}/repos`, "https://api.github.com");
+    url.searchParams.set("type", "public");
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    const res = await fetchImpl(url.toString(), { headers: GITHUB_API_HEADERS(token) });
+    if (res.status === 404) {
+      throw new Error(`GitHub org not found: ${org}`);
+    }
+    if (!res.ok) {
+      const snippet = (await res.text()).slice(0, 200);
+      throw new Error(`GitHub API ${res.status} listing public repos for ${org}: ${snippet}`);
+    }
+    const body = await res.json();
+    if (!Array.isArray(body) || !body.length) break;
+    for (const entry of body) {
+      if (entry && typeof entry.name === "string") names.add(entry.name);
+    }
+    if (body.length < 100) break;
+    page += 1;
+  }
+  return names;
+}
+
 /** Live check: each repo must be visibility=public on GitHub. */
 export async function verifyGithubRepoVisibility(repos, opts = {}) {
   const {
@@ -63,34 +98,15 @@ export async function verifyGithubRepoVisibility(repos, opts = {}) {
 
   const nonPublic = [];
   const checked = [];
+  const publicNames = await fetchPublicRepoNames(org, token, fetchImpl);
   for (const repo of repos || []) {
     assertGithubSlug(repo, "repo");
     checked.push(repo);
-    const url = `https://api.github.com/repos/${org}/${encodeURIComponent(repo)}`;
-    const res = await fetchImpl(url, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "search-mcp-corpus-boundary",
-      },
-    });
-    if (res.status === 404) {
+    if (!publicNames.has(repo)) {
       nonPublic.push({
         repo,
-        visibility: "not_found",
-        reason: "repo not found or token lacks access",
+        visibility: "not_public_or_missing",
       });
-      continue;
-    }
-    if (!res.ok) {
-      const snippet = (await res.text()).slice(0, 200);
-      throw new Error(`GitHub API ${res.status} for ${org}/${repo}: ${snippet}`);
-    }
-    const body = await res.json();
-    const vis = typeof body.visibility === "string" ? body.visibility : body.private ? "private" : "public";
-    if (vis !== "public") {
-      nonPublic.push({ repo, visibility: vis });
     }
   }
   return { skipped: false, checked, nonPublic };

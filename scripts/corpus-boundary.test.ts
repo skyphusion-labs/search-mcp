@@ -54,12 +54,14 @@ describe("verifyGithubRepoVisibility", () => {
     expect(r.skipped).toBe(true);
   });
 
-  it("flags private repos", async () => {
+  it("flags repos not in the org public list", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.endsWith("/open-repo")) {
-        return new Response(JSON.stringify({ visibility: "public", private: false }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ visibility: "private", private: true }), { status: 200 });
+      expect(url).toContain("/orgs/acme/repos");
+      expect(url).not.toContain("secret-repo");
+      return new Response(
+        JSON.stringify([{ name: "open-repo" }, { name: "other-public" }]),
+        { status: 200 },
+      );
     });
     const r = await verifyGithubRepoVisibility(["open-repo", "secret-repo"], {
       org: "acme",
@@ -67,5 +69,6 @@ describe("verifyGithubRepoVisibility", () => {
       fetchImpl,
     });
     expect(r.nonPublic.map((x) => x.repo)).toEqual(["secret-repo"]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
