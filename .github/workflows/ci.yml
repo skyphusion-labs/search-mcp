@@ -1,5 +1,9 @@
 name: ci
 
+# PR + main gate (aviation-grade). Fork PRs run on GitHub-hosted runners without
+# secrets. Production deploy on main uses fleet runners and materializes config from
+# GitHub secrets (wrangler.toml, wrangler.mcp.toml, scripts/targets.json).
+
 on:
   push:
     branches: [main]
@@ -26,3 +30,31 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  deploy:
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.repository == 'skyphusion-labs/search-mcp'
+    runs-on: [self-hosted, fleet]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Materialize production config
+        env:
+          SKYPHUSION_WRANGLER_TOML: ${{ secrets.SKYPHUSION_WRANGLER_TOML }}
+          SKYPHUSION_WRANGLER_MCP_TOML: ${{ secrets.SKYPHUSION_WRANGLER_MCP_TOML }}
+          SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
+        run: node scripts/materialize-config.mjs
+      - name: Deploy public query Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+      - name: Deploy internal MCP Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy:mcp

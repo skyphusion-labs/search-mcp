@@ -1,34 +1,48 @@
-# Optional CI snippet: notify search-mcp to resync after a merge to main.
-# Copy the job block into a source repo's .github/workflows/ci.yml (or a dedicated
-# corpus-notify.yml). Fire-and-forget; never gates the build.
-#
-# Requires the org-level Actions secret SEARCH_DISPATCH_TOKEN (visibility: all repos):
-# a fine-grained PAT scoped to fire repository_dispatch on skyphusion-labs/search-mcp.
+name: corpus-notify
 
-  notify-corpus-sync:
-    if: github.event_name == push && github.ref == refs/heads/main
+# When this repo merges to main, fire corpus-sync so search-mcp's own docs reindex.
+# Fire-and-forget; never a CI gate.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corpus-notify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Trigger corpus resync
+      - name: Dispatch corpus-sync to search-mcp
         env:
           SEARCH_DISPATCH_TOKEN: ${{ secrets.SEARCH_DISPATCH_TOKEN }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [ -z "${SEARCH_DISPATCH_TOKEN:+SET}" ]; then
             echo "::error::SEARCH_DISPATCH_TOKEN is unset (org secret, visibility all)."
             exit 1
           fi
-          payload="$(jq -nc --arg repo "${{ github.repository }}" --arg sha "${{ github.sha }}" \
+          payload="$(jq -nc --arg repo "$SOURCE_REPO" --arg sha "$SOURCE_SHA" \
             '{event_type:"corpus-sync",client_payload:{source:$repo,sha:$sha}}')"
           code="$(curl -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' \
             -X POST \
-            -H "Authorization: Bearer ${SEARCH_DISPATCH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${SEARCH_DISPATCH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/skyphusion-labs/search-mcp/dispatches \
             -d "$payload")"
+          echo "repository_dispatch (corpus-sync) -> HTTP ${code}"
           if [ "$code" != "204" ]; then
             echo "::error::corpus-sync dispatch failed (HTTP ${code})."
             cat /tmp/dispatch_resp.txt || true
             exit 1
           fi
+          echo "corpus-sync dispatch accepted."
