@@ -18,14 +18,16 @@ materialized at deploy/sync time by `scripts/materialize-config.mjs`. Never comm
 
 ## GitHub secrets (search-mcp repo)
 
-Copy deploy/sync creds from the retired `skyphusion-search` repo (same names):
+Deploy/sync creds are escrowed in `crew-secrets` (`secrets-shared.env.age`, shared
+infra tier) and copied into GitHub Actions secrets on `search-mcp`:
 
-| Secret | Purpose |
-| --- | --- |
-| `CLOUDFLARE_ACCOUNT_ID` | CF account |
-| `CLOUDFLARE_API_TOKEN` | Workers deploy + AI Search reindex |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Corpus bucket R/W |
-| `CORPUS_READ_TOKEN` | Fine-grained PAT: clone private repos + GitHub visibility guard |
+| GitHub secret | crew-secrets export | Purpose |
+| --- | --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | `CLOUDFLARE_ACCOUNT_ID` | CF account |
+| `CLOUDFLARE_API_TOKEN` | `CLOUDFLARE_API_TOKEN` | Workers deploy + AI Search reindex (shared non-admin token) |
+| `R2_ACCESS_KEY_ID` | `SEARCH_MCP_R2_ACCESS_KEY_ID` | Corpus bucket R/W (token id `skyphusion-search-corpus-sync-r2`) |
+| `R2_SECRET_ACCESS_KEY` | `SEARCH_MCP_R2_SECRET_ACCESS_KEY` | S3 secret (sha256 of rolled R2 token value) |
+| `CORPUS_READ_TOKEN` | `CORPUS_READ_TOKEN` | GitHub PAT: clone private repos + visibility guard |
 | `SKYPHUSION_WRANGLER_TOML` | Public query Worker config (see below) |
 | `SKYPHUSION_WRANGLER_MCP_TOML` | Internal MCP Worker config (see below) |
 | `SKYPHUSION_TARGETS_JSON` | Corpus repo lists (see below) |
@@ -51,8 +53,19 @@ gh secret set SKYPHUSION_WRANGLER_MCP_TOML -R skyphusion-labs/search-mcp < wrang
 gh secret set SKYPHUSION_TARGETS_JSON -R skyphusion-labs/search-mcp < scripts/targets.json
 ```
 
-Copy the five deploy/sync secrets from `skyphusion-search` to `search-mcp` in the GitHub UI
-(values are not readable via API; re-enter from your password manager or mint fresh).
+Re-seed GitHub secrets from crew-secrets (decrypt on a crew box, pipe straight to
+`gh secret set`, never echo values):
+
+```sh
+set -a
+. <(age -d -i ~/.config/chezmoi/key.txt ~/.config/crew/secrets-shared.env.age)
+set +a
+gh secret set CLOUDFLARE_ACCOUNT_ID -R skyphusion-labs/search-mcp --body "$CLOUDFLARE_ACCOUNT_ID"
+gh secret set CLOUDFLARE_API_TOKEN -R skyphusion-labs/search-mcp --body "$CLOUDFLARE_API_TOKEN"
+gh secret set R2_ACCESS_KEY_ID -R skyphusion-labs/search-mcp --body "$SEARCH_MCP_R2_ACCESS_KEY_ID"
+gh secret set R2_SECRET_ACCESS_KEY -R skyphusion-labs/search-mcp --body "$SEARCH_MCP_R2_SECRET_ACCESS_KEY"
+gh secret set CORPUS_READ_TOKEN -R skyphusion-labs/search-mcp --body "$CORPUS_READ_TOKEN"
+```
 
 ## SKYPHUSION_WRANGLER_TOML
 
