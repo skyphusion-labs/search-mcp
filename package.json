@@ -12,8 +12,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "sync": "node scripts/sync.mjs corpus",
+    "sync:public": "node scripts/sync.mjs public",
+    "sync:internal": "node scripts/sync.mjs internal",
     "sync:dry": "node scripts/sync.mjs corpus --dry-run",
-    "sync:run": "node scripts/sync-runner.mjs"
+    "sync:run": "node scripts/sync-runner.mjs",
+    "materialize-config": "node scripts/materialize-config.mjs"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.888.0",

@@ -1,0 +1,54 @@
+name: corpus-sync
+
+# Merge-driven resync of the Cloudflare AI Search corpus. Production plumbing, NOT a CI
+# gate: never add it to required status checks.
+#
+# Triggers:
+#   - repository_dispatch (corpus-sync): a constellation repo merged to main.
+#   - schedule: daily safety net for dropped or failed dispatches.
+#   - workflow_dispatch: manual re-run.
+#
+# Config (wrangler.toml, wrangler.mcp.toml, scripts/targets.json) is materialized from
+# GitHub secrets at runtime; nothing sensitive is committed to this public repo.
+
+on:
+  repository_dispatch:
+    types: [corpus-sync]
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corpus-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'skyphusion-labs/search-mcp'
+    runs-on: [self-hosted, fleet]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Materialize production config
+        env:
+          SKYPHUSION_WRANGLER_TOML: ${{ secrets.SKYPHUSION_WRANGLER_TOML }}
+          SKYPHUSION_WRANGLER_MCP_TOML: ${{ secrets.SKYPHUSION_WRANGLER_MCP_TOML }}
+          SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
+        run: node scripts/materialize-config.mjs
+      - name: Sync corpus and reindex
+        env:
+          CORPUS_ROOT: ${{ vars.CORPUS_ROOT || format('{0}/.corpus', github.workspace) }}
+          CORPUS_GIT_ORG: skyphusion-labs
+          GITHUB_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/sync-runner.mjs

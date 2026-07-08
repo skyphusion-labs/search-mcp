@@ -104,7 +104,9 @@ Run the query Worker and MCP Worker against different AI Search instances when y
 
 ## 8. CI
 
-`.github/workflows/ci.yml` runs `typecheck` + `vitest` on GitHub-hosted runners. Deploy is intentionally manual (or wire your own deploy job with `CLOUDFLARE_API_TOKEN`).
+`.github/workflows/ci.yml` runs `typecheck` + `vitest` on GitHub-hosted runners (fork-safe).
+Production deploy and corpus sync are gated to `main` on fleet runners; config is
+materialized from GitHub secrets. Skyphusion operators: [docs/skyphusion/OPERATOR.md](docs/skyphusion/OPERATOR.md).
 
 ## Troubleshooting
 
