@@ -9,7 +9,8 @@ name: corpus-sync
 #   - workflow_dispatch: manual re-run.
 #
 # Config (wrangler.toml, wrangler.mcp.toml, scripts/targets.json) is materialized from
-# GitHub secrets at runtime; nothing sensitive is committed to this public repo.
+# Public repo -> GitHub-hosted runners (fleet pool rejects public-repo jobs).
+# Ephemeral CORPUS_ROOT under the workspace; set repo variable CORPUS_ROOT for incremental clones on a self-hosted volume if added later.
 
 on:
   repository_dispatch:
@@ -28,8 +29,8 @@ concurrency:
 jobs:
   sync:
     if: github.repository == 'skyphusion-labs/search-mcp'
-    runs-on: [self-hosted, fleet]
-    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
