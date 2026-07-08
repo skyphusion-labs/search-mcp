@@ -16,9 +16,9 @@ Cursor (laptop) and the Claude crew (dischord/jello). **Trust this file and merg
 | `https://search-internal.vivijure.com/health` | OK (`search-mcp`) |
 | MCP `tools/list` + `tools/call` search | OK |
 | `corpus-sync` workflow | Green ([run 28966994684](https://github.com/skyphusion-labs/search-mcp/actions/runs/28966994684)) |
-| Constellation `corpus-notify` retargets | **Pending merge** (local branches only) |
-| crew-secrets R2 escrow re-seed (new token id) | **Pending** (GitHub secrets live; age file stale) |
-| Archive `skyphusion-search` | **Blocked** until notify retargets merge + Actions disabled |
+| Constellation `corpus-notify` retargets | Done (2026-07-08, all indexed repos on `main`) |
+| crew-secrets R2 escrow re-seed (new token id) | **Pending** (Conrad: crew reseed Thursday; GitHub secrets live) |
+| Archive `skyphusion-search` | Done (2026-07-08; Actions disabled first) |
 
 ## What moved where
 
@@ -120,30 +120,14 @@ Wrangler runtime secrets (`MCP_TOKEN`, `TURNSTILE_SECRET`) remain on the Workers
 `vivijure-backend` GitHub `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` were re-seeded the same
 day (token id unchanged: `1414e61f52f48f737c4cd85c21e24145`).
 
-## Constellation corpus-notify retarget (pending)
+## Constellation corpus-notify (complete 2026-07-08)
 
-Nine repos have **local** edits retargeting `corpus-notify.yml` from
-`skyphusion-labs/skyphusion-search` → `skyphusion-labs/search-mcp`. **Remote `main` on these
-repos still dispatches the old repo** (verified on `vivijure` 2026-07-08).
+All repos in `SKYPHUSION_TARGETS_JSON` now have `.github/workflows/corpus-notify.yml` on
+`main`, dispatching `repository_dispatch` (`corpus-sync`) to `skyphusion-labs/search-mcp`.
+Canonical template: `docs/corpus-notify.workflow.yml`.
 
-Repos with local retarget (not yet pushed/merged):
-
-- `vivijure`
-- `vivijure-backend`
-- `vivijure-com`
-- `vivijure-audio-upscale`
-- `vivijure-local-12gb`
-- `vivijure-local-16gb`
-- `vivijure-musetalk`
-- `vivijure-upscale`
-- `slate`
-
-Change pattern: dispatch URL → `https://api.github.com/repos/skyphusion-labs/search-mcp/dispatches`,
-comments reference `search-mcp`. Snippet reference: `docs/notify-corpus-sync.snippet.yml` in
-this repo.
-
-**Backstop until merged:** `corpus-sync` runs daily at `17 7 * * *` UTC on `search-mcp` plus
-manual `workflow_dispatch`.
+Merge to `main` on any indexed repo triggers sync + reindex within minutes. Daily cron
+(`17 7 * * *` UTC) remains the backstop.
 
 ## Archive procedure for skyphusion-search
 
