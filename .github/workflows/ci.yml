@@ -1,8 +1,8 @@
 name: ci
 
 # PR + main gate (aviation-grade). Fork PRs run on GitHub-hosted runners without
-# secrets. Production deploy on main uses fleet runners and materializes config from
-# GitHub secrets (wrangler.toml, wrangler.mcp.toml, scripts/targets.json).
+# Production deploy on main uses GitHub-hosted runners (public repo; org fleet pool
+# does not accept public-repo jobs). Config materialized from GitHub secrets.
 
 on:
   push:
@@ -34,8 +34,8 @@ jobs:
   deploy:
     needs: ci
     if: github.ref == 'refs/heads/main' && github.repository == 'skyphusion-labs/search-mcp'
-    runs-on: [self-hosted, fleet]
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
