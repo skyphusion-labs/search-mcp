@@ -32,6 +32,17 @@ function githubTokenFromEnv(env = process.env) {
   return env.GITHUB_TOKEN || env.GH_TOKEN || "";
 }
 
+// GitHub repo/org slug charset; rejects path segments and other URL metacharacters
+// before repo names from targets.json reach the GitHub API fetch.
+const GITHUB_SLUG_RE = /^[A-Za-z0-9._-]{1,100}$/;
+
+export function assertGithubSlug(slug, kind) {
+  if (typeof slug !== "string" || !GITHUB_SLUG_RE.test(slug)) {
+    throw new Error(`invalid GitHub ${kind} for API request: ${String(slug)}`);
+  }
+  return slug;
+}
+
 /** Live check: each repo must be visibility=public on GitHub. */
 export async function verifyGithubRepoVisibility(repos, opts = {}) {
   const {
@@ -42,6 +53,7 @@ export async function verifyGithubRepoVisibility(repos, opts = {}) {
   if (!org) {
     throw new Error("org is required for GitHub visibility verification");
   }
+  assertGithubSlug(org, "org");
   if (!token) {
     return { skipped: true, reason: "no_github_token", checked: [], nonPublic: [] };
   }
@@ -52,6 +64,7 @@ export async function verifyGithubRepoVisibility(repos, opts = {}) {
   const nonPublic = [];
   const checked = [];
   for (const repo of repos || []) {
+    assertGithubSlug(repo, "repo");
     checked.push(repo);
     const url = `https://api.github.com/repos/${org}/${encodeURIComponent(repo)}`;
     const res = await fetchImpl(url, {
