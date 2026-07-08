@@ -5,7 +5,8 @@ topology (domains, repo lists, bucket names) lives in GitHub Actions secrets and
 materialized at deploy/sync time by `scripts/materialize-config.mjs`. Never commit
 `wrangler.toml`, `wrangler.mcp.toml`, or `scripts/targets.json` (they are gitignored).
 
-`skyphusion-labs/skyphusion-search` is retired after cutover.
+`skyphusion-labs/skyphusion-search` is retired after cutover. Full migration record:
+[CUTOVER.md](./CUTOVER.md).
 
 ## Instances
 
@@ -24,9 +25,9 @@ infra tier) and copied into GitHub Actions secrets on `search-mcp`:
 | GitHub secret | crew-secrets export | Purpose |
 | --- | --- | --- |
 | `CLOUDFLARE_ACCOUNT_ID` | `CLOUDFLARE_ACCOUNT_ID` | CF account |
-| `CLOUDFLARE_API_TOKEN` | `CLOUDFLARE_API_TOKEN` | Workers deploy + AI Search reindex (shared non-admin token) |
-| `R2_ACCESS_KEY_ID` | `SEARCH_MCP_R2_ACCESS_KEY_ID` | Corpus bucket R/W (token id `skyphusion-search-corpus-sync-r2`) |
-| `R2_SECRET_ACCESS_KEY` | `SEARCH_MCP_R2_SECRET_ACCESS_KEY` | S3 secret (sha256 of rolled R2 token value) |
+| `CLOUDFLARE_API_TOKEN` | `SEARCH_MCP_CF_API_TOKEN` | Rolled `skyphusion-search-ci` account token (Workers Scripts + Routes + AI Search) |
+| `R2_ACCESS_KEY_ID` | `SEARCH_MCP_R2_ACCESS_KEY_ID` | CF token **`skyphusion-search-corpus-sync-r2`** (id `143953b0147a67dca0236ccec4c450f9`) |
+| `R2_SECRET_ACCESS_KEY` | `SEARCH_MCP_R2_SECRET_ACCESS_KEY` | SHA-256 hex of token value (`jq -j` on create/roll response; see CUTOVER.md) |
 | `CORPUS_READ_TOKEN` | `CORPUS_READ_TOKEN` | Conrad operator PAT from `~conrad/github.env` (`GITHUB_PERSONAL_ACCESS_TOKEN`); full org read for private repo clones + visibility guard |
 | `SKYPHUSION_WRANGLER_TOML` | Public query Worker config (see below) |
 | `SKYPHUSION_WRANGLER_MCP_TOML` | Internal MCP Worker config (see below) |
@@ -41,7 +42,8 @@ Wrangler runtime secrets (`MCP_TOKEN`, `TURNSTILE_SECRET`) stay on the Workers v
 | --- | --- |
 | `SEARCH_DISPATCH_TOKEN` | Fine-grained PAT: `repository_dispatch` write on **search-mcp** only |
 
-Re-scope the existing org PAT from `skyphusion-search` to `search-mcp` after merge.
+Org PAT re-scoped to `search-mcp` (2026-07-08). Constellation repos still need
+`corpus-notify.yml` retarget merges; see CUTOVER.md.
 
 ## Bootstrap: set config secrets
 
@@ -61,7 +63,7 @@ set -a
 . <(age -d -i ~/.config/chezmoi/key.txt ~/.config/crew/secrets-shared.env.age)
 set +a
 gh secret set CLOUDFLARE_ACCOUNT_ID -R skyphusion-labs/search-mcp --body "$CLOUDFLARE_ACCOUNT_ID"
-gh secret set CLOUDFLARE_API_TOKEN -R skyphusion-labs/search-mcp --body "$CLOUDFLARE_API_TOKEN"
+gh secret set CLOUDFLARE_API_TOKEN -R skyphusion-labs/search-mcp --body "$SEARCH_MCP_CF_API_TOKEN"
 gh secret set R2_ACCESS_KEY_ID -R skyphusion-labs/search-mcp --body "$SEARCH_MCP_R2_ACCESS_KEY_ID"
 gh secret set R2_SECRET_ACCESS_KEY -R skyphusion-labs/search-mcp --body "$SEARCH_MCP_R2_SECRET_ACCESS_KEY"
 gh secret set CORPUS_READ_TOKEN -R skyphusion-labs/search-mcp --body "$CORPUS_READ_TOKEN"
@@ -207,15 +209,24 @@ are excluded.
 }
 ```
 
+## R2 corpus token (mint / roll)
+
+Account-scoped **`Workers R2 Storage Write`** on the CF account (not bucket Item Read/Write;
+bucket-scoped tokens failed S3 auth during cutover). Mint via privileged token at
+`~conrad/cloudflare-mcp.env`. S3 access key id = token id; secret = SHA-256 hex of token
+value with **no trailing newline** (`jq -j`, not `jq -r`). Roll once, wait ~15s, verify
+list+put locally, then `gh secret set` from files. Full failure log: [CUTOVER.md](./CUTOVER.md).
+
 ## Cutover checklist
 
-1. Merge the search-mcp consolidation PR.
-2. Set all eight repo secrets on `search-mcp` (three config blobs + five creds).
-3. Re-scope `SEARCH_DISPATCH_TOKEN` org PAT to `search-mcp`.
-4. Merge constellation `corpus-notify` retarget PRs (or batch update).
-5. Run `corpus-sync` workflow manually once; confirm green.
-6. Verify `https://search.vivijure.com/health` and MCP `tools/list` on internal host.
-7. Archive `skyphusion-labs/skyphusion-search` (disable Actions first).
+1. ~~Merge the search-mcp consolidation PR.~~ Done (#4, #5).
+2. ~~Set all eight repo secrets on `search-mcp`.~~ Done (2026-07-08).
+3. ~~Re-scope `SEARCH_DISPATCH_TOKEN` org PAT to `search-mcp`.~~ Done.
+4. **Merge constellation `corpus-notify` retarget PRs** (nine repos; local edits exist, not on `main` yet).
+5. ~~Run `corpus-sync` manually once; confirm green.~~ Done ([28966994684](https://github.com/skyphusion-labs/search-mcp/actions/runs/28966994684)).
+6. ~~Verify health + MCP.~~ Done.
+7. Re-seed crew-secrets R2 escrow (`143953b0…` token id).
+8. Archive `skyphusion-labs/skyphusion-search` (**after** step 4; disable Actions first).
 
 ## MCP client wiring
 

@@ -29,6 +29,15 @@ npm test
 
 Provision R2 + AI Search, sync your corpus, deploy both Workers. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
 
+## Skyphusion production
+
+This repo is the production home for Skyphusion AI Search (`search.vivijure.com`,
+`search-internal.vivijure.com`). Config is materialized from GitHub Actions secrets at deploy/sync
+time; do not commit `wrangler.toml`, `wrangler.mcp.toml`, or `scripts/targets.json`.
+
+- [Operator runbook](docs/skyphusion/OPERATOR.md) -- secrets, topology, bootstrap
+- [Cutover record (2026-07-08)](docs/skyphusion/CUTOVER.md) -- migration history, failure log, archive steps
+
 ## Workers
 
 | Worker | Entry | Endpoint | Auth |
