@@ -4,6 +4,7 @@ import {
   assertPublicCorpusBoundary,
   verifyGithubRepoVisibility,
   assertPublicGithubVisibility,
+  assertGithubSlug,
 } from "./corpus-boundary.mjs";
 
 describe("publicRestrictedOverlap", () => {
@@ -32,6 +33,18 @@ describe("assertPublicCorpusBoundary", () => {
         "public",
       ),
     ).toThrow(/public corpus boundary violation/);
+  });
+});
+
+describe("assertGithubSlug", () => {
+  it("accepts valid slugs", () => {
+    expect(assertGithubSlug("open-repo", "repo")).toBe("open-repo");
+    expect(assertGithubSlug("skyphusion-labs", "org")).toBe("skyphusion-labs");
+  });
+
+  it("rejects path metacharacters", () => {
+    expect(() => assertGithubSlug("../evil", "repo")).toThrow(/invalid GitHub repo/);
+    expect(() => assertGithubSlug("foo/bar", "repo")).toThrow(/invalid GitHub repo/);
   });
 });
 

@@ -26,15 +26,16 @@
     var root = document.querySelector(targetSel);
     if (!root) return;
     root.classList.add("vjask");
+    // Static template only. Label, placeholder, and Turnstile sitekey are applied via
+    // the DOM API below so attribute values are never concatenated into innerHTML.
     root.innerHTML =
       '<form class="vjask-form">' +
-      '  <label class="vjask-label" for="vjask-input">' + label + "</label>" +
+      '  <label class="vjask-label" for="vjask-input"></label>' +
       '  <div class="vjask-row">' +
-      '    <input id="vjask-input" class="vjask-input" type="text" autocomplete="off"' +
-      '           placeholder="' + placeholder.replace(/"/g, "&quot;") + '" maxlength="2000" />' +
+      '    <input id="vjask-input" class="vjask-input" type="text" autocomplete="off" maxlength="2000" />' +
       '    <button class="vjask-btn" type="submit">Ask</button>' +
       "  </div>" +
-      (sitekey ? '  <div class="vjask-turnstile cf-turnstile" data-sitekey="' + sitekey + '" data-size="flexible"></div>' : "") +
+      (sitekey ? '  <div class="vjask-turnstile-slot"></div>' : "") +
       '  <div class="vjask-answer" aria-live="polite"></div>' +
       '  <ul class="vjask-sources" hidden></ul>' +
       "</form>";
@@ -44,6 +45,20 @@
     var btn = root.querySelector(".vjask-btn");
     var answer = root.querySelector(".vjask-answer");
     var sources = root.querySelector(".vjask-sources");
+    var labelEl = root.querySelector(".vjask-label");
+    if (labelEl) labelEl.textContent = label;
+    if (input) input.setAttribute("placeholder", placeholder);
+
+    if (sitekey) {
+      var slot = root.querySelector(".vjask-turnstile-slot");
+      if (slot) {
+        var ts = document.createElement("div");
+        ts.className = "vjask-turnstile cf-turnstile";
+        ts.setAttribute("data-sitekey", sitekey);
+        ts.setAttribute("data-size", "flexible");
+        slot.replaceWith(ts);
+      }
+    }
 
     function turnstileToken() {
       if (!sitekey || !window.turnstile) return "";
