@@ -27,7 +27,7 @@ infra tier) and copied into GitHub Actions secrets on `search-mcp`:
 | `CLOUDFLARE_API_TOKEN` | `CLOUDFLARE_API_TOKEN` | Workers deploy + AI Search reindex (shared non-admin token) |
 | `R2_ACCESS_KEY_ID` | `SEARCH_MCP_R2_ACCESS_KEY_ID` | Corpus bucket R/W (token id `skyphusion-search-corpus-sync-r2`) |
 | `R2_SECRET_ACCESS_KEY` | `SEARCH_MCP_R2_SECRET_ACCESS_KEY` | S3 secret (sha256 of rolled R2 token value) |
-| `CORPUS_READ_TOKEN` | `CORPUS_READ_TOKEN` | GitHub PAT: clone private repos + visibility guard |
+| `CORPUS_READ_TOKEN` | `CORPUS_READ_TOKEN` | Conrad operator PAT from `~conrad/github.env` (`GITHUB_PERSONAL_ACCESS_TOKEN`); full org read for private repo clones + visibility guard |
 | `SKYPHUSION_WRANGLER_TOML` | Public query Worker config (see below) |
 | `SKYPHUSION_WRANGLER_MCP_TOML` | Internal MCP Worker config (see below) |
 | `SKYPHUSION_TARGETS_JSON` | Corpus repo lists (see below) |
