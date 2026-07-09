@@ -1,6 +1,6 @@
 {
   "name": "@skyphusion/search-mcp",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Bearer-gated MCP server and streaming query Worker over Cloudflare AI Search, plus a git-to-R2 corpus sync toolkit.",
   "license": "AGPL-3.0-only",
   "author": "Conrad Rockenhaus <conrad@skyphusion.org>",
@@ -28,7 +28,8 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "files": [
     "scripts/corpus-boundary.mjs",
