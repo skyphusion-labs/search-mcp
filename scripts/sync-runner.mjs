@@ -18,6 +18,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  resolveTargetsPath,
+  targetsHelp,
+} from "./config-paths.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..");
@@ -162,9 +166,9 @@ export function run(plan, deps) {
 }
 
 function loadConfig() {
-  const path = join(HERE, "targets.json");
-  if (!existsSync(path)) {
-    console.error("Missing scripts/targets.json. Copy scripts/targets.json.example and edit it.");
+  const path = resolveTargetsPath(HERE);
+  if (!path) {
+    console.error(targetsHelp(HERE));
     process.exit(2);
   }
   return JSON.parse(readFileSync(path, "utf8"));

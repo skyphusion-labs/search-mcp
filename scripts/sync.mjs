@@ -14,6 +14,7 @@
 //   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY   (required unless --dry-run)
 //   R2_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID   (to build the S3 endpoint)
 //   R2_S3_ENDPOINT                            (optional override)
+//   SEARCH_MCP_TARGETS                       (optional path to targets.json)
 //   SYNC_REPO_ROOT                            (optional clone root)
 //   GITHUB_TOKEN or GH_TOKEN                  (optional; live visibility check for public target)
 //   CORPUS_GIT_ORG                            (required for GitHub visibility check)
@@ -37,9 +38,15 @@ import {
   fileExt,
   isExcludedPath,
 } from "./sync-ingest.mjs";
+import {
+  resolveTargetsPath,
+  defaultRepoRoot,
+  targetsHelp,
+} from "./config-paths.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = process.env.SYNC_REPO_ROOT || join(HERE, "..", "..");
+const TARGETS_PATH = resolveTargetsPath(HERE);
+const REPO_ROOT = defaultRepoRoot(HERE, TARGETS_PATH);
 const MAX_BYTES = 4 * 1024 * 1024;
 
 const args = process.argv.slice(2);
@@ -109,14 +116,11 @@ function readTextSample(abs, size) {
 }
 
 function loadConfig() {
-  const path = join(HERE, "targets.json");
-  if (!existsSync(path)) {
-    console.error(
-      "Missing scripts/targets.json. Copy scripts/targets.json.example and edit it.",
-    );
+  if (!TARGETS_PATH) {
+    console.error(targetsHelp(HERE));
     process.exit(2);
   }
-  return JSON.parse(readFileSync(path, "utf8"));
+  return JSON.parse(readFileSync(TARGETS_PATH, "utf8"));
 }
 
 function planRepo(repo, excludePrefixes = []) {

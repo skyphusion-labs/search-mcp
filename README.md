@@ -14,7 +14,32 @@ Open-source toolkit for [Cloudflare AI Search](https://developers.cloudflare.com
 git repos  ->  sync.mjs  ->  R2 bucket  ->  AI Search instance  ->  /ask + /mcp
 ```
 
-## Quick start
+## Install (npm)
+
+The corpus sync CLIs and ask-widget assets ship on npm as **`@skyphusion/search-mcp`** (the unscoped name `search-mcp` is taken by another project).
+
+```sh
+npm install @skyphusion/search-mcp
+# or run without installing:
+npx --package=@skyphusion/search-mcp search-mcp-sync corpus --dry-run
+```
+
+| Command | Role |
+| --- | --- |
+| `search-mcp-sync` | Upload git-tracked corpus files to R2 for one target |
+| `search-mcp-sync-run` | Clone/fetch repos, sync all targets, optional reindex |
+
+Put `targets.json` in your project root (copy from `node_modules/@skyphusion/search-mcp/scripts/targets.json.example`) or set `SEARCH_MCP_TARGETS`. Clone roots default to the current working directory; override with `SYNC_REPO_ROOT`.
+
+Widget assets after install:
+
+```sh
+cp node_modules/@skyphusion/search-mcp/public/ask-widget.{js,css} ./docs/
+```
+
+Workers (`src/`) deploy from a git clone; see [docs/DEPLOY.md](docs/DEPLOY.md).
+
+## Quick start (from source)
 
 ```sh
 npm install

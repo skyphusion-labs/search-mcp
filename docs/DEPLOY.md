@@ -34,9 +34,10 @@ Note the instance name; it goes in both wrangler configs and `scripts/targets.js
 
 ```sh
 cp scripts/targets.json.example scripts/targets.json
+# npm install: copy targets.json.example to ./targets.json in your project root
 ```
 
-Edit `repos` (directory names under your clone root), `bucket`, and `instance`.
+Edit `repos` (directory names under `SYNC_REPO_ROOT`), `bucket`, and `instance`. Default clone root is the parent of this repo when `targets.json` lives under `scripts/`; with the npm CLIs it is the current working directory.
 
 ### Manual sync (local clones)
 
