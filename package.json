@@ -3,6 +3,20 @@
   "version": "0.1.0",
   "description": "Bearer-gated MCP server and streaming query Worker over Cloudflare AI Search, plus a git-to-R2 corpus sync toolkit.",
   "license": "AGPL-3.0-only",
+  "homepage": "https://github.com/skyphusion-labs/search-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skyphusion-labs/search-mcp.git"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "mcp",
+    "ai-search",
+    "rag",
+    "semantic-search",
+    "model-context-protocol",
+    "self-hosted"
+  ],
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",

@@ -98,6 +98,16 @@ Copy `public/ask-widget.js` and `public/ask-widget.css` to your docs site:
         data-sitekey="YOUR_TURNSTILE_SITEKEY"></script>
 ```
 
+## Who this is for
+
+Operators building documentation search, agent tooling, or internal knowledge bases on [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/) with MCP and a browser widget.
+
+## Links
+
+- **Deploy guide:** [docs/DEPLOY.md](docs/DEPLOY.md)
+- **Skyphusion Labs:** https://skyphusion.org · **Org:** https://github.com/skyphusion-labs
+- **Related:** [vivijure](https://github.com/skyphusion-labs/vivijure), [postern](https://github.com/skyphusion-labs/postern)
+
 ## License
 
 AGPL-3.0-only. See [LICENSE](LICENSE).
