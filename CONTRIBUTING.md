@@ -22,6 +22,12 @@ Thanks for helping improve search-mcp.
 - Replacement of Cloudflare AI Search / R2 / Workers with non-Cloudflare alternatives
 - Features that expand scope without a clear, general-purpose use case
 
+## Maintainers: npm release
+
+1. Bump `version` in `package.json` (semver).
+2. Create a GitHub Release whose tag matches (`v0.1.0` for package version `0.1.0`).
+3. The [Publish npm package](.github/workflows/publish-npm.yml) workflow runs on release publish (needs org secret `NPM_TOKEN` with publish access to `@skyphusion`).
+
 ## Pull requests
 
 See the PR template checklist. Maintainers cut releases; do not bump version or CHANGELOG unless asked.

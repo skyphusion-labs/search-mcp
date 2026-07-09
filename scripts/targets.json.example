@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to targets.json and edit. repos are directory names under SYNC_REPO_ROOT (default: parent of this repo). Only git-tracked files are uploaded.",
+  "_comment": "Copy to targets.json (./targets.json for npm CLI, or scripts/targets.json in a git clone). repos are directory names under SYNC_REPO_ROOT (default: cwd for npm, parent of this repo for dev clone). Only git-tracked files are uploaded.",
   "excludePaths": {
     "example-repo": ["vendor/private-notes/"]
   },

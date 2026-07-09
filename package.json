@@ -1,12 +1,16 @@
 {
-  "name": "search-mcp",
+  "name": "@skyphusion/search-mcp",
   "version": "0.1.0",
   "description": "Bearer-gated MCP server and streaming query Worker over Cloudflare AI Search, plus a git-to-R2 corpus sync toolkit.",
   "license": "AGPL-3.0-only",
-  "homepage": "https://github.com/skyphusion-labs/search-mcp",
+  "author": "Conrad Rockenhaus <conrad@skyphusion.org>",
+  "homepage": "https://github.com/skyphusion-labs/search-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/skyphusion-labs/search-mcp.git"
+    "url": "git+https://github.com/skyphusion-labs/search-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/skyphusion-labs/search-mcp/issues"
   },
   "keywords": [
     "cloudflare-workers",
@@ -15,9 +19,33 @@
     "rag",
     "semantic-search",
     "model-context-protocol",
-    "self-hosted"
+    "self-hosted",
+    "cloudflare",
+    "corpus-sync"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "scripts/corpus-boundary.mjs",
+    "scripts/config-paths.mjs",
+    "scripts/sync-ingest.mjs",
+    "scripts/sync.mjs",
+    "scripts/sync-runner.mjs",
+    "scripts/targets.json.example",
+    "public/ask-widget.js",
+    "public/ask-widget.css",
+    "LICENSE",
+    "README.md"
+  ],
+  "bin": {
+    "search-mcp-sync": "./scripts/sync.mjs",
+    "search-mcp-sync-run": "./scripts/sync-runner.mjs"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "dev:mcp": "wrangler dev -c wrangler.mcp.toml",
@@ -25,6 +53,7 @@
     "deploy:mcp": "wrangler deploy -c wrangler.mcp.toml",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "prepack": "npm run typecheck && npm test",
     "sync": "node scripts/sync.mjs corpus",
     "sync:public": "node scripts/sync.mjs public",
     "sync:internal": "node scripts/sync.mjs internal",
@@ -32,8 +61,10 @@
     "sync:run": "node scripts/sync-runner.mjs",
     "materialize-config": "node scripts/materialize-config.mjs"
   },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.888.0"
+  },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.888.0",
     "@cloudflare/workers-types": "^4.20260606.1",
     "@vitest/coverage-istanbul": "^4.1.10",
     "typescript": "^6.0.3",
