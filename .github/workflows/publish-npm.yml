@@ -35,6 +35,15 @@ jobs:
             exit 1
           fi
 
-      - run: npm publish --provenance --access public
+      - name: Publish (skip if version already on registry)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          pkg="$(node -p "require('./package.json').name")"
+          ver="$(node -p "require('./package.json').version")"
+          if npm view "${pkg}@${ver}" version >/dev/null 2>&1; then
+            echo "Skip: ${pkg}@${ver} already published"
+            exit 0
+          fi
+          npm publish --provenance --access public
