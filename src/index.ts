@@ -7,6 +7,16 @@ const DEFAULT_SYSTEM_PROMPT = [
   "flags, prices, or behavior. Prefer concrete file and command references. Be concise.",
 ].join(" ");
 
+const BLOG_ORIGINS = new Set(["https://skyphusion.net", "https://www.skyphusion.net"]);
+
+const BLOG_SYSTEM_PROMPT = [
+  "You are the search assistant for skyphusion.net, Conrad Rockenhaus's engineering blog.",
+  "Answer only from the retrieved context (blog posts, READMEs, and public repo docs in the corpus).",
+  "Prefer linking ideas to specific posts or projects when the context names them.",
+  "If the context does not contain the answer, say so plainly; never invent posts, URLs, or behavior.",
+  "Be concise and write in plain technical prose.",
+].join(" ");
+
 const MAX_QUESTION_LEN = 2000;
 const TURNSTILE_VERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -100,7 +110,10 @@ async function handleAsk(request: Request, env: Env): Promise<Response> {
   const { success } = await env.ASK_LIMITER.limit({ key: `ask:${ip}` });
   if (!success) return json({ error: "rate_limited" }, 429, cors);
 
-  const systemPrompt = env.ASSISTANT_SYSTEM_PROMPT?.trim() || DEFAULT_SYSTEM_PROMPT;
+  const origin = request.headers.get("Origin") ?? "";
+  const systemPrompt = BLOG_ORIGINS.has(origin)
+    ? env.BLOG_ASSISTANT_SYSTEM_PROMPT?.trim() || BLOG_SYSTEM_PROMPT
+    : env.ASSISTANT_SYSTEM_PROMPT?.trim() || DEFAULT_SYSTEM_PROMPT;
   const messages: AiSearchMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: question },
