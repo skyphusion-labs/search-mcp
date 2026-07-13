@@ -5,7 +5,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    ignore:
-      # wrangler@4 peerOptional is still on workers-types v4; reopen when wrangler ships v5 peer.
-      - dependency-name: "@cloudflare/workers-types"
-        update-types: ["version-update:semver-major"]
+    groups:
+      cloudflare-toolchain:
+        patterns:
+          - "wrangler"
+          - "@cloudflare/workers-types"
