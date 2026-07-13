@@ -4,7 +4,8 @@ import worker from "./src/index";
 import type { Env } from "./src/env";
 
 const env = {
-  ALLOWED_ORIGINS: "https://docs.example.com,https://www.docs.example.com",
+  ALLOWED_ORIGINS:
+    "https://docs.example.com,https://www.docs.example.com,https://skyphusion.net,https://www.skyphusion.net",
   GENERATION_MODEL: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 } as unknown as Env;
 
@@ -43,6 +44,14 @@ describe("query worker", () => {
       }),
     );
     expect(res.status).toBe(403);
+  });
+
+  it("allows skyphusion.net origin on OPTIONS", async () => {
+    const res = await call(
+      req("/ask", { method: "OPTIONS", headers: { Origin: "https://skyphusion.net" } }),
+    );
+    expect(res.status).toBe(204);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://skyphusion.net");
   });
 
   it("400 on invalid JSON from an allowed origin", async () => {

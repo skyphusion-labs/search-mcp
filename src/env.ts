@@ -65,6 +65,7 @@ export interface Env {
   ALLOWED_ORIGINS: string;
   GENERATION_MODEL: string;
   ASSISTANT_SYSTEM_PROMPT?: string;
+  BLOG_ASSISTANT_SYSTEM_PROMPT?: string;
 }
 
 export interface McpEnv {

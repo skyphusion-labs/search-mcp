@@ -95,7 +95,7 @@ namespace_id = "1"
   period = 60
 
 [vars]
-ALLOWED_ORIGINS = "https://vivijure.com,https://www.vivijure.com"
+ALLOWED_ORIGINS = "https://vivijure.com,https://www.vivijure.com,https://skyphusion.net,https://www.skyphusion.net"
 GENERATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
 [[routes]]
@@ -154,6 +154,7 @@ are excluded.
         ".github",
         "common-thread",
         "hollow-grid-go",
+        "hollow-grid-py",
         "mud-bots",
         "postern",
         "prism",
@@ -168,6 +169,8 @@ are excluded.
         "vivijure-audio-upscale",
         "vivijure-backend",
         "vivijure-com",
+        "vivijure-core",
+        "vivijure-local",
         "vivijure-local-12gb",
         "vivijure-local-16gb",
         "vivijure-musetalk",
@@ -184,6 +187,7 @@ are excluded.
         "crew-secrets",
         "fleet-chezmoi",
         "hollow-grid-go",
+        "hollow-grid-py",
         "mud-bots",
         "ops",
         "postern",
@@ -199,6 +203,8 @@ are excluded.
         "vivijure-audio-upscale",
         "vivijure-backend",
         "vivijure-com",
+        "vivijure-core",
+        "vivijure-local",
         "vivijure-local-12gb",
         "vivijure-local-16gb",
         "vivijure-musetalk",
