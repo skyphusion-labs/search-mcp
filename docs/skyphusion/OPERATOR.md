@@ -238,3 +238,21 @@ list+put locally, then `gh secret set` from files. Full failure log: [CUTOVER.md
 
 Per-consumer tokens live in `MCP_TOKEN` (`name=token` list). See the public
 [DEPLOY.md](../DEPLOY.md) MCP section; production host is `search-internal.vivijure.com`.
+
+### Structured search results (search-mcp#10, shipped 2026-07-15)
+
+`tools/call` on the `search` tool returns `structuredContent.chunks[]` with
+`{ repo, path, score, text }` alongside the legacy `content[0].text` blob.
+Consumers should prefer `structuredContent` for citations; text output is kept
+for backward compatibility.
+
+### Incremental corpus sync (search-mcp#9, shipped 2026-07-15)
+
+`corpus-sync.yml` caches `.corpus` via `actions/cache` on GitHub-hosted runners
+(public repo policy). `sync-runner.mjs` logs `(clone)` vs `(fetch)` per repo.
+Second-run verification:
+[29455578737](https://github.com/skyphusion-labs/search-mcp/actions/runs/29455578737)
+(cache hit, all fetch).
+
+Fleet JIT runners mount `/opt/corpus` when jobs set `CORPUS_ROOT=/opt/corpus`
+(see fleet-chezmoi `gha-dispatcher` README, image `:4`).
