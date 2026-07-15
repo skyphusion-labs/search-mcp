@@ -27,12 +27,26 @@ export interface AiSearchQuery {
   ai_search_options?: AiSearchOptions;
 }
 
+export interface AiSearchChunkMetadata {
+  repo?: string;
+  path?: string;
+  lang?: string;
+  kind?: string;
+}
+
 export interface AiSearchChunk {
   id: string;
   type: string;
   score: number;
   text: string;
-  item: { key: string; timestamp?: number; metadata?: Record<string, unknown> };
+  item: { key: string; timestamp?: number; metadata?: AiSearchChunkMetadata };
+}
+
+export interface SearchResultChunk {
+  repo: string;
+  path: string;
+  score: number;
+  text: string;
 }
 
 export interface AiSearchSearchResponse {
