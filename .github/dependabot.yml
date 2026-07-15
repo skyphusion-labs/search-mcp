@@ -1,12 +1,38 @@
 version: 2
+
+# skyphusion-labs Dependabot standard — see fleet-chezmoi/docs/runbooks/dependabot-standard.md
+# PRs only (never auto-merge). Group minor/patch; majors stay separate. Peer families bump together.
 updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
     groups:
       cloudflare-toolchain:
         patterns:
           - "wrangler"
           - "@cloudflare/workers-types"
+      vitest-toolchain:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      npm-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "wrangler"
+          - "@cloudflare/workers-types"
+          - "vitest"
+          - "@vitest/*"
+        update-types: ["minor", "patch"]
