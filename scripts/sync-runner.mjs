@@ -89,8 +89,10 @@ function git(args, opts = {}) {
 function syncRepoTree(org, repo, root, authArgs) {
   const dir = join(root, repo);
   const url = repoUrl(org, repo);
+  let mode = "fetch";
   if (!existsSync(join(dir, ".git"))) {
     git([...authArgs, "clone", "--quiet", url, dir]);
+    mode = "clone";
   } else {
     git([...authArgs, "-C", dir, "remote", "set-url", "origin", url]);
     git([...authArgs, "-C", dir, "fetch", "--prune", "--quiet", "origin"]);
@@ -104,6 +106,7 @@ function syncRepoTree(org, repo, root, authArgs) {
   }
   git(["-C", dir, "reset", "--hard", "--quiet", head]);
   git(["-C", dir, "clean", "-fdq"]);
+  return mode;
 }
 
 function reindexInstance(instance) {
@@ -121,8 +124,8 @@ export function run(plan, deps) {
   const failedClones = [];
   for (const repo of repos) {
     try {
-      cloneTree(repo);
-      log(`  ok  ${repo}`);
+      const mode = cloneTree(repo);
+      log(`  ok  ${repo} (${mode})`);
     } catch (err) {
       failedClones.push(repo);
       error(`  !!  ${repo}: git failed (${describeExit(err)})`);

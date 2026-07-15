@@ -10,7 +10,9 @@ name: corpus-sync
 #
 # Config (wrangler.toml, wrangler.mcp.toml, scripts/targets.json) is materialized from
 # Public repo -> GitHub-hosted runners (fleet pool rejects public-repo jobs).
-# Ephemeral CORPUS_ROOT under the workspace; set repo variable CORPUS_ROOT for incremental clones on a self-hosted volume if added later.
+# CORPUS_ROOT defaults to ${{ github.workspace }}/.corpus; actions/cache restores it between
+# runs so sync-runner fetch-es instead of full-cloning. Fleet runners mount /opt/corpus when
+# a job sets CORPUS_ROOT=/opt/corpus (see fleet-chezmoi gha-dispatcher).
 
 on:
   repository_dispatch:
@@ -43,6 +45,13 @@ jobs:
           SKYPHUSION_WRANGLER_MCP_TOML: ${{ secrets.SKYPHUSION_WRANGLER_MCP_TOML }}
           SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
         run: node scripts/materialize-config.mjs
+      - name: Restore corpus clone cache
+        uses: actions/cache@v4
+        with:
+          path: .corpus
+          key: corpus-${{ runner.os }}-${{ hashFiles('scripts/targets.json') }}
+          restore-keys: |
+            corpus-${{ runner.os }}-
       - name: Sync corpus and reindex
         env:
           CORPUS_ROOT: ${{ vars.CORPUS_ROOT || format('{0}/.corpus', github.workspace) }}

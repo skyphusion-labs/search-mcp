@@ -1,4 +1,4 @@
-import type { McpEnv, AiSearchChunk } from "./env";
+import type { McpEnv, AiSearchChunk, SearchResultChunk } from "./env";
 
 // Bearer-gated Streamable-HTTP MCP server with a single `search` tool over a Cloudflare
 // AI Search instance. Deploy separately from the public /ask query Worker when you want
@@ -23,7 +23,46 @@ const SEARCH_TOOL = {
     },
     required: ["query"],
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      chunks: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            repo: { type: "string" },
+            path: { type: "string" },
+            score: { type: "number" },
+            text: { type: "string" },
+          },
+          required: ["repo", "path", "score", "text"],
+        },
+      },
+    },
+    required: ["chunks"],
+  },
 };
+
+function chunkKeyParts(key: string): { repo: string; path: string } {
+  const slash = key.indexOf("/");
+  if (slash === -1) return { repo: "unknown", path: key };
+  return { repo: key.slice(0, slash), path: key.slice(slash + 1) };
+}
+
+export function mapSearchChunks(chunks: AiSearchChunk[]): SearchResultChunk[] {
+  return chunks.map((c) => {
+    const meta = c.item?.metadata;
+    const fromKey = chunkKeyParts(c.item?.key ?? "unknown");
+    const path = meta?.path ?? fromKey.path.replace(/\.txt$/, "");
+    return {
+      repo: meta?.repo ?? fromKey.repo,
+      path,
+      score: c.score,
+      text: c.text,
+    };
+  });
+}
 
 // MCP_TOKEN is either a single bare token (legacy, attributed as "default") or a
 // comma-separated list of `name=token` entries. Returns the matched consumer name,
@@ -89,15 +128,20 @@ async function handleRpc(msg: RpcMessage, env: McpEnv): Promise<unknown> {
           ai_search_options: { retrieval: { retrieval_type: "hybrid", max_num_results: max } },
         });
         const chunks: AiSearchChunk[] = res.chunks || [];
-        const text = chunks.length
-          ? chunks
+        const structured = mapSearchChunks(chunks);
+        const text = structured.length
+          ? structured
               .map(
                 (c) =>
-                  `# ${c.item?.key ?? "unknown"}  (score ${c.score.toFixed(3)})\n${c.text}`,
+                  `# ${c.repo}/${c.path}  (score ${c.score.toFixed(3)})\n${c.text}`,
               )
               .join("\n\n---\n\n")
           : "No results.";
-        return rpcResult(id, { content: [{ type: "text", text }], isError: false });
+        return rpcResult(id, {
+          content: [{ type: "text", text }],
+          structuredContent: { chunks: structured },
+          isError: false,
+        });
       } catch (err) {
         return rpcResult(id, {
           content: [{ type: "text", text: `Search failed: ${String(err)}` }],

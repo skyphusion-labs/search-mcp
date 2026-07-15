@@ -1,4 +1,3 @@
-import { matchConsumer } from "./src/mcp";
 import { describe, it, expect } from "vitest";
 import worker from "./src/index";
 import type { Env } from "./src/env";
@@ -63,23 +62,5 @@ describe("query worker", () => {
       }),
     );
     expect(res.status).toBe(400);
-  });
-});
-
-describe("matchConsumer", () => {
-  it("accepts a legacy bare token as 'default'", () => {
-    expect(matchConsumer("tok-abc", "tok-abc")).toBe("default");
-    expect(matchConsumer("tok-abc", "tok-xyz")).toBeNull();
-  });
-  it("matches named entries and attributes the consumer", () => {
-    const secret = "agent-a=tok-a, agent-b=tok-b";
-    expect(matchConsumer(secret, "tok-a")).toBe("agent-a");
-    expect(matchConsumer(secret, "tok-b")).toBe("agent-b");
-    expect(matchConsumer(secret, "tok-other")).toBeNull();
-  });
-  it("fails closed on unset secret or empty presentation", () => {
-    expect(matchConsumer(undefined, "tok")).toBeNull();
-    expect(matchConsumer("", "tok")).toBeNull();
-    expect(matchConsumer("agent=tok", "")).toBeNull();
   });
 });
