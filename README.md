@@ -110,23 +110,25 @@ The sync remaps non-native extensions (`.ts`, `.tsx`, extensionless `Dockerfile`
 
 ### Reindex dispatch
 
-`sync-runner` reindexes after a successful sync, with one guard: if a reindex job is already in
-flight for that instance it **waits** for it to finish before dispatching. Firing into a running
-job does not queue behind it; Cloudflare ends the running job with
-`end_reason: "new_job_has_started"` and restarts. On a large corpus the reindex can outlive the
-sync that triggers it, so an unguarded dispatch during a burst of merges restarts the index pass
-repeatedly and it never settles.
+AI Search rejects a new reindex job for two distinct reasons, and `sync-runner` clears both
+before dispatching:
+
+1. **A job is in flight.** Firing anyway does not queue behind it; Cloudflare ends the running
+   job with `end_reason: "new_job_has_started"` and restarts. So we wait for `ended_at`.
+2. **The post-job cooldown.** Even once a job ends, a new one is refused for a cooldown window
+   with `sync_in_cooldown [code: 7020]`. Waiting for the job to end is necessary but not
+   sufficient, so we retry until it clears.
 
 Waiting (rather than skipping) means the job we start always lands strictly after our own
 upload, so it sees every object this run wrote. Merge bursts still coalesce: a waiting run holds
 the workflow concurrency group, and GitHub keeps only the newest queued run, so the runs behind
 it collapse instead of each firing their own reindex.
 
-The wait is bounded (10 minutes, comfortably longer than a full reindex). On timeout it
-dispatches anyway and logs loudly: a job running that long is anomalous, and the replacement
-reindexes the whole corpus, so superseding it is the correct recovery. The failure mode is
-deliberately "one supersession in a pathological case" rather than "the corpus quietly goes
-unindexed".
+Each wait has its own budget (10 min in-flight, 10 min cooldown) rather than one shared
+deadline, because the worst healthy case is roughly 6 min waiting on a large reindex plus up to
+7 min of cooldown. Cooldown clears well inside that, so ordinary bursts never go red. If a
+budget is exhausted the run fails loudly and says what it means: the R2 corpus uploaded fine,
+nothing is lost, the index lags until the next sync or the daily backstop.
 
 ## Ask widget
 

@@ -6,6 +6,7 @@
 //   node scripts/sync-runner.mjs corpus          # one target
 //   node scripts/sync-runner.mjs --dry-run
 //   node scripts/sync-runner.mjs --no-reindex
+//   node scripts/sync-runner.mjs --reindex-only     # skip clone+sync, dispatch reindex only
 //   node scripts/sync-runner.mjs --no-github-verify
 //
 // Env:
@@ -31,9 +32,11 @@ export function parseArgs(argv, allTargetNames = []) {
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
   const positional = argv.filter((a) => !a.startsWith("--"));
   const requested = positional[0];
+  const reindexOnly = flags.has("--reindex-only");
   return {
     targets: requested ? [requested] : [...allTargetNames],
     dryRun: flags.has("--dry-run"),
+    sync: !reindexOnly,
     reindex: !flags.has("--no-reindex") && !flags.has("--dry-run"),
     passThrough: [...flags].filter((f) => f === "--dry-run" || f === "--no-github-verify"),
   };
@@ -109,11 +112,25 @@ function syncRepoTree(org, repo, root, authArgs) {
   return mode;
 }
 
-function reindexInstance(instance) {
-  execFileSync("npx", ["wrangler", "ai-search", "jobs", "create", instance, "--json"], {
-    stdio: "inherit",
-    cwd: REPO,
-  });
+/**
+ * One dispatch attempt. stderr is PIPED rather than inherited: wrangler reports
+ * `sync_in_cooldown [code: 7020]` on stderr, and with stdio "inherit" that text never reaches
+ * the thrown error, so the retry logic could not tell a cooldown from a real failure. We echo
+ * the captured output so the run log is unchanged.
+ */
+function reindexOnce(instance) {
+  try {
+    const out = execFileSync(
+      "npx",
+      ["wrangler", "ai-search", "jobs", "create", instance, "--json"],
+      { cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+    if (out) process.stdout.write(out);
+  } catch (err) {
+    if (err.stdout) process.stdout.write(err.stdout);
+    if (err.stderr) process.stderr.write(err.stderr);
+    throw err;
+  }
 }
 
 /**
@@ -138,8 +155,23 @@ function listJobs(instance) {
   return JSON.parse(out);
 }
 
-export const REINDEX_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+// Two independent budgets, deliberately NOT one shared deadline. Measured worst case on the
+// biggest corpus: ~6 min waiting for an in-flight reindex, then up to ~7 min of AI Search
+// cooldown before a new job is accepted. A single 10 min bound would fail loud at ~13 min of
+// entirely healthy waiting, so each phase gets its own budget.
+export const REINDEX_INFLIGHT_TIMEOUT_MS = 10 * 60 * 1000;
+export const REINDEX_COOLDOWN_TIMEOUT_MS = 10 * 60 * 1000;
 export const REINDEX_POLL_MS = 15 * 1000;
+
+/**
+ * AI Search refuses a new job for a cooldown window after the previous one ENDS, distinct from
+ * the job being in flight. Measured 2026-07-16: rejected 10s after a job ended, accepted at
+ * 6m45s. Waiting for `ended_at` alone is necessary but not sufficient.
+ */
+export function isCooldownError(err) {
+  const text = `${err?.stdout || ""}${err?.stderr || ""}${err?.message || ""}`;
+  return /sync_in_cooldown|code:\s*7020/.test(text);
+}
 
 /**
  * Block until no reindex job is in flight for the instance, so our dispatch lands strictly
@@ -156,7 +188,7 @@ export async function awaitReindexSlot(instance, deps) {
     listJobs,
     sleep,
     now = () => Date.now(),
-    timeoutMs = REINDEX_WAIT_TIMEOUT_MS,
+    timeoutMs = REINDEX_INFLIGHT_TIMEOUT_MS,
     pollMs = REINDEX_POLL_MS,
     log = console.log,
   } = deps;
@@ -181,6 +213,49 @@ export async function awaitReindexSlot(instance, deps) {
 }
 
 /**
+ * Dispatch a reindex, retrying while AI Search reports its post-job cooldown.
+ *
+ * Cooldown is transient and short (measured well under the budget), so the routine burst case
+ * clears here and never goes red. Exhausting the budget therefore means something genuinely
+ * anomalous upstream, and we fail loud rather than exit green: a green run while indexing is
+ * actually stalled is the work-blind failure mode this whole issue exists to remove. The
+ * message carries the honest blast radius so the red is actionable, not alarming.
+ */
+export async function dispatchWithCooldownRetry(instance, deps) {
+  const {
+    runReindexOnce,
+    sleep,
+    now = () => Date.now(),
+    timeoutMs = REINDEX_COOLDOWN_TIMEOUT_MS,
+    pollMs = REINDEX_POLL_MS,
+    log = console.log,
+  } = deps;
+  const deadline = now() + timeoutMs;
+  let announced = false;
+  for (;;) {
+    try {
+      runReindexOnce(instance);
+      return { retried: announced };
+    } catch (err) {
+      if (!isCooldownError(err)) throw err;
+      if (now() >= deadline) {
+        throw new Error(
+          `reindex for ${instance} blocked by AI Search cooldown for longer than ` +
+            `${Math.round(timeoutMs / 1000)}s. The R2 corpus uploaded OK and no data is lost; ` +
+            "the index lags until the next sync or the daily backstop. A cooldown this " +
+            "persistent is upstream and anomalous, so this run fails loudly on purpose.",
+        );
+      }
+      if (!announced) {
+        log(`  ${instance} is in AI Search cooldown; retrying until it clears.`);
+        announced = true;
+      }
+      await sleep(pollMs);
+    }
+  }
+}
+
+/**
  * The real dependencies main() hands to awaitReindexSlot.
  *
  * Exported and built here on purpose. Every other seam in this file is injected, so a unit
@@ -192,12 +267,13 @@ export async function awaitReindexSlot(instance, deps) {
 export function productionReindexDeps() {
   return {
     listJobs,
+    runReindexOnce: reindexOnce,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };
 }
 
 export async function run(plan, deps) {
-  const { repos, targets, instances, reindex } = plan;
+  const { repos, targets, instances, reindex, sync = true } = plan;
   const {
     cloneTree,
     runSync,
@@ -207,29 +283,33 @@ export async function run(plan, deps) {
     error = console.error,
   } = deps;
 
-  log(`Refreshing ${repos.length} repo tree(s) ...`);
-  const failedClones = [];
-  for (const repo of repos) {
-    try {
-      const mode = cloneTree(repo);
-      log(`  ok  ${repo} (${mode})`);
-    } catch (err) {
-      failedClones.push(repo);
-      error(`  !!  ${repo}: git failed (${describeExit(err)})`);
+  if (sync) {
+    log(`Refreshing ${repos.length} repo tree(s) ...`);
+    const failedClones = [];
+    for (const repo of repos) {
+      try {
+        const mode = cloneTree(repo);
+        log(`  ok  ${repo} (${mode})`);
+      } catch (err) {
+        failedClones.push(repo);
+        error(`  !!  ${repo}: git failed (${describeExit(err)})`);
+      }
     }
-  }
 
-  if (failedClones.length) {
-    error(
-      `BLOCKER: ${failedClones.length} clone/fetch failure(s) [${failedClones.join(", ")}]; ` +
-        "aborting before sync so no repo corpus is pruned or synced stale.",
-    );
-    return { exitCode: 1, synced: false };
-  }
+    if (failedClones.length) {
+      error(
+        `BLOCKER: ${failedClones.length} clone/fetch failure(s) [${failedClones.join(", ")}]; ` +
+          "aborting before sync so no repo corpus is pruned or synced stale.",
+      );
+      return { exitCode: 1, synced: false };
+    }
 
-  for (const target of targets) {
-    log(`\n=== sync ${target} ===`);
-    runSync(target);
+    for (const target of targets) {
+      log(`\n=== sync ${target} ===`);
+      runSync(target);
+    }
+  } else {
+    log("Reindex-only: skipping clone and sync.");
   }
 
   const failedReindex = [];
@@ -238,7 +318,7 @@ export async function run(plan, deps) {
       log(`\n=== reindex ${instance} ===`);
       try {
         if (awaitSlot) await awaitSlot(instance);
-        runReindex(instance);
+        await runReindex(instance);
       } catch (err) {
         failedReindex.push(instance);
         error(`  !! reindex failed for ${instance} (${describeExit(err)})`);
@@ -250,10 +330,10 @@ export async function run(plan, deps) {
 
   if (failedReindex.length) {
     error(`BLOCKER: ${failedReindex.length} reindex failure(s) [${failedReindex.join(", ")}].`);
-    return { exitCode: 1, synced: true };
+    return { exitCode: 1, synced: sync };
   }
   log("\nCorpus sync complete.");
-  return { exitCode: 0, synced: true };
+  return { exitCode: 0, synced: sync };
 }
 
 function loadConfig() {
@@ -285,7 +365,7 @@ async function main() {
   console.log(`Org: ${org}`);
 
   const result = await run(
-    { repos, targets: opts.targets, instances, reindex: opts.reindex },
+    { repos, targets: opts.targets, instances, reindex: opts.reindex, sync: opts.sync },
     {
       cloneTree: (repo) => syncRepoTree(org, repo, root, authArgs),
       runSync: (target) =>
@@ -294,8 +374,8 @@ async function main() {
           cwd: REPO,
           env: { ...process.env, SYNC_REPO_ROOT: root },
         }),
-      runReindex: reindexInstance,
       awaitSlot: (instance) => awaitReindexSlot(instance, productionReindexDeps()),
+      runReindex: (instance) => dispatchWithCooldownRetry(instance, productionReindexDeps()),
     },
   );
   process.exit(result.exitCode);

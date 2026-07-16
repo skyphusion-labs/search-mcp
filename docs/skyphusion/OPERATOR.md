@@ -38,22 +38,55 @@ Wrangler runtime secrets (`MCP_TOKEN`, `TURNSTILE_SECRET`) stay on the Workers v
 
 ## Corpus freshness and reindex
 
-- **Merge-driven:** each indexed repo dispatches `corpus-sync`, which syncs R2 and then
-  reindexes both instances.
-- **Reindex wait:** `sync-runner` waits for any in-flight reindex on that instance to finish
-  before dispatching, so a running job is never superseded (#12). `skyphusion-internal` is the
-  case that matters: its reindex takes roughly 6 minutes, longer than a sync run, so an
-  unguarded dispatch during a merge burst restarted the index pass repeatedly.
-  `skyphusion-public` finishes in roughly 30 seconds and rarely waits at all.
-- **Bounded:** the wait gives up after 10 minutes and dispatches anyway with a loud log line.
-  A reindex running that long is anomalous; the replacement job covers the full corpus.
-- **Burst coalescing:** a waiting run holds the `corpus-sync` concurrency group, and GitHub
-  keeps only the newest queued run, so a burst collapses to roughly one running plus one queued
-  instead of N reindexes.
-- **Daily backstop:** `corpus-sync` cron `17 7 * * *` UTC.
+`corpus-sync` runs as two steps on purpose: **Sync corpus to R2**, then **Reindex AI Search**.
+If a reindex is blocked the red lands on the second step, and the green first step says plainly
+that the R2 corpus is intact.
 
-Every merge still reindexes; the wait only changes *when* the dispatch lands, never whether it
-happens.
+### The two gates before a reindex can start
+
+AI Search rejects a new job for **two different reasons**, and both must be cleared (#12):
+
+1. **A job is in flight.** Dispatching anyway does not queue; Cloudflare ends the running job
+   with `end_reason: "new_job_has_started"` and restarts it. `sync-runner` waits for
+   `ended_at` instead.
+2. **The post-job cooldown.** Even after a job ends, AI Search refuses a new one for a cooldown
+   window with `sync_in_cooldown [code: 7020]`. **Waiting for the job to end is necessary but
+   not sufficient.** `sync-runner` retries until it clears.
+
+**Measured 2026-07-16** (`skyphusion-internal`, corpus ~3133 objects):
+
+| quantity | measurement |
+| --- | --- |
+| full internal reindex | 4m01s, 5m05s, 5m44s observed |
+| full public reindex | ~25 to 30s |
+| cooldown: dispatch 10s after job end | **rejected**, `sync_in_cooldown [code: 7020]` |
+| cooldown: dispatch 6m45s after job end | **accepted** |
+
+So the cooldown window is longer than 10s and shorter than 6m45s. It has not been pinned more
+precisely, and Cloudflare does not document a figure; treat 7 min as the working worst case.
+
+### Why the timeouts are what they are
+
+The two waits have **independent budgets** (10 min in-flight, 10 min cooldown), not one shared
+deadline. Worst healthy case is ~6 min waiting on an in-flight reindex plus ~7 min of cooldown,
+about 13 min of entirely legitimate waiting: a single 10 min bound would fail a healthy run.
+Job `timeout-minutes` is 45 to leave room for both instances.
+
+### Failure behavior
+
+Cooldown clears well inside the budget, so the routine burst case never goes red. If a budget
+is exhausted the run **fails loudly** rather than exiting green: a green run while indexing is
+stalled is the work-blind failure this issue exists to remove. The error states the blast
+radius (R2 corpus uploaded OK, no data loss, index lags until the next sync or the daily
+backstop).
+
+### Burst coalescing
+
+A waiting run holds the `corpus-sync` concurrency group and GitHub keeps only the newest queued
+run, so a burst collapses to roughly one running plus one queued rather than N reindexes.
+Verified live: 5 dispatches produced 1 running + 1 queued + 3 cancelled.
+
+- **Daily backstop:** `corpus-sync` cron `17 7 * * *` UTC.
 
 ## Org secret (constellation repos)
 
