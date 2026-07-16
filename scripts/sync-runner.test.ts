@@ -7,6 +7,8 @@ import {
   scrubSecrets,
   describeExit,
   jobInFlight,
+  awaitReindexSlot,
+  productionReindexDeps,
   run,
 } from "./sync-runner.mjs";
 
@@ -59,9 +61,9 @@ describe("run", () => {
     reindex: true,
   };
 
-  it("clone failure aborts before sync", () => {
+  it("clone failure aborts before sync", async () => {
     const runSync = vi.fn();
-    const res = run(plan, {
+    const res = await run(plan, {
       cloneTree: (repo) => {
         if (repo === "b") {
           const e: any = new Error("git failed");
@@ -90,7 +92,70 @@ describe("jobInFlight", () => {
   });
 });
 
-describe("run reindex guard (#12)", () => {
+describe("awaitReindexSlot (#12)", () => {
+  const quiet = () => {};
+  const running = [{ ended_at: null }];
+  const done = [{ ended_at: "2026-07-16 19:35:43" }];
+
+  it("dispatches without waiting when nothing is in flight", async () => {
+    const sleep = vi.fn();
+    const r = await awaitReindexSlot("search-alpha", {
+      listJobs: () => done,
+      sleep,
+      log: quiet,
+    });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(r).toEqual({ waited: false, timedOut: false });
+  });
+
+  it("waits while a job is in flight, then returns once it finishes", async () => {
+    let calls = 0;
+    const sleep = vi.fn(async () => {});
+    const r = await awaitReindexSlot("search-alpha", {
+      // in flight for the first two polls, finished on the third
+      listJobs: () => (++calls <= 2 ? running : done),
+      sleep,
+      log: quiet,
+    });
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(r).toEqual({ waited: true, timedOut: false });
+  });
+
+  it("gives up at the bound and dispatches anyway rather than leaving the corpus unindexed", async () => {
+    let clock = 0;
+    const r = await awaitReindexSlot("search-alpha", {
+      listJobs: () => running, // never finishes
+      sleep: async () => {
+        clock += 15_000;
+      },
+      now: () => clock,
+      timeoutMs: 60_000,
+      pollMs: 15_000,
+      log: quiet,
+    });
+    expect(r.timedOut).toBe(true);
+    expect(r.waited).toBe(true);
+  });
+
+  it("says so loudly when it supersedes on timeout", async () => {
+    let clock = 0;
+    const log = vi.fn();
+    await awaitReindexSlot("search-internal", {
+      listJobs: () => running,
+      sleep: async () => {
+        clock += 15_000;
+      },
+      now: () => clock,
+      timeoutMs: 30_000,
+      log,
+    });
+    const said = log.mock.calls.flat().join(" ");
+    expect(said).toMatch(/still in flight/);
+    expect(said).toMatch(/superseding/);
+  });
+});
+
+describe("run reindex ordering (#12)", () => {
   const plan = {
     repos: ["a"],
     targets: ["alpha"],
@@ -99,52 +164,42 @@ describe("run reindex guard (#12)", () => {
   };
   const quiet = () => {};
 
-  it("dispatches when no job is in flight", () => {
-    const runReindex = vi.fn();
-    const res = run(plan, {
+  it("waits for the slot before dispatching, and dispatches exactly once", async () => {
+    const order: string[] = [];
+    const res = await run(plan, {
       cloneTree: () => "fetch",
-      runSync: vi.fn(),
-      runReindex,
-      reindexInFlight: () => false,
+      runSync: () => order.push("sync"),
+      awaitSlot: async () => order.push("wait"),
+      runReindex: () => order.push("reindex"),
       log: quiet,
       error: quiet,
     });
-    expect(runReindex).toHaveBeenCalledExactlyOnceWith("search-alpha");
+    // The upload must be complete before we wait, and the wait before we dispatch, so the
+    // job we start always sees the objects this run uploaded.
+    expect(order).toEqual(["sync", "wait", "reindex"]);
     expect(res.exitCode).toBe(0);
   });
 
-  it("skips dispatch when a job is in flight, so the running job is not superseded", () => {
+  it("never reindexes when the sync itself failed", async () => {
     const runReindex = vi.fn();
-    const res = run(plan, {
-      cloneTree: () => "fetch",
-      runSync: vi.fn(),
-      runReindex,
-      reindexInFlight: () => true,
-      log: quiet,
-      error: quiet,
-    });
+    await expect(
+      run(plan, {
+        cloneTree: () => "fetch",
+        runSync: () => {
+          throw new Error("sync blew up");
+        },
+        awaitSlot: async () => {},
+        runReindex,
+        log: quiet,
+        error: quiet,
+      }),
+    ).rejects.toThrow(/sync blew up/);
     expect(runReindex).not.toHaveBeenCalled();
-    // A skip is not a failure: the corpus is in R2 and reindex-settle fires the trailing pass.
-    expect(res.exitCode).toBe(0);
-    expect(res.synced).toBe(true);
   });
 
-  it("still syncs the corpus when the reindex dispatch is skipped", () => {
-    const runSync = vi.fn();
-    run(plan, {
-      cloneTree: () => "fetch",
-      runSync,
-      runReindex: vi.fn(),
-      reindexInFlight: () => true,
-      log: quiet,
-      error: quiet,
-    });
-    expect(runSync).toHaveBeenCalledExactlyOnceWith("alpha");
-  });
-
-  it("dispatches when no guard is injected, preserving prior behavior", () => {
+  it("dispatches when no waiter is injected, preserving prior behavior", async () => {
     const runReindex = vi.fn();
-    run(plan, {
+    await run(plan, {
       cloneTree: () => "fetch",
       runSync: vi.fn(),
       runReindex,
@@ -152,5 +207,22 @@ describe("run reindex guard (#12)", () => {
       error: quiet,
     });
     expect(runReindex).toHaveBeenCalledExactlyOnceWith("search-alpha");
+  });
+});
+
+describe("production wiring", () => {
+  // Regression guard. Every seam in sync-runner is injected, so the stubs in this file say
+  // nothing about what main() actually constructs. Ripping out reindex-settle deleted the
+  // module-scope listJobs while main still referenced it: tests green, `node --check` clean,
+  // and the first real dispatch would have thrown ReferenceError. Building the dep object
+  // here evaluates every binding, so that failure surfaces in CI instead of in production.
+  it("builds main's reindex deps with no undefined symbols", () => {
+    const deps = productionReindexDeps();
+    expect(typeof deps.listJobs).toBe("function");
+    expect(typeof deps.sleep).toBe("function");
+  });
+
+  it("wires a sleep that actually resolves", async () => {
+    await expect(productionReindexDeps().sleep(1)).resolves.toBeUndefined();
   });
 });

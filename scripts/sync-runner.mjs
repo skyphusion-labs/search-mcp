@@ -138,17 +138,71 @@ function listJobs(instance) {
   return JSON.parse(out);
 }
 
-function reindexInFlightForInstance(instance) {
-  return jobInFlight(listJobs(instance));
+export const REINDEX_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+export const REINDEX_POLL_MS = 15 * 1000;
+
+/**
+ * Block until no reindex job is in flight for the instance, so our dispatch lands strictly
+ * after the running job finishes instead of superseding it.
+ *
+ * On timeout we dispatch ANYWAY and say so loudly. A job still running past the bound (well
+ * over the ~6 min a full internal reindex takes) is itself anomalous, and superseding it is
+ * the correct recovery: the replacement job sees every object currently in R2. The failure
+ * mode we want is "one supersession in a pathological case", never "the corpus quietly goes
+ * unindexed", which is the class of bug that a trailing-pass design introduced.
+ */
+export async function awaitReindexSlot(instance, deps) {
+  const {
+    listJobs,
+    sleep,
+    now = () => Date.now(),
+    timeoutMs = REINDEX_WAIT_TIMEOUT_MS,
+    pollMs = REINDEX_POLL_MS,
+    log = console.log,
+  } = deps;
+  const deadline = now() + timeoutMs;
+  let waited = false;
+  while (jobInFlight(listJobs(instance))) {
+    if (now() >= deadline) {
+      log(
+        `  !! reindex for ${instance} still in flight after ${Math.round(timeoutMs / 1000)}s; ` +
+          "dispatching anyway and superseding it. A job running this long is anomalous; " +
+          "the replacement job reindexes the full corpus, so this is safe but worth a look.",
+      );
+      return { waited, timedOut: true };
+    }
+    if (!waited) {
+      log(`  reindex in flight for ${instance}; waiting for it to finish before dispatching.`);
+    }
+    waited = true;
+    await sleep(pollMs);
+  }
+  return { waited, timedOut: false };
 }
 
-export function run(plan, deps) {
+/**
+ * The real dependencies main() hands to awaitReindexSlot.
+ *
+ * Exported and built here on purpose. Every other seam in this file is injected, so a unit
+ * suite full of stubs proves nothing about the production wiring: an undefined symbol here
+ * rides a green suite and a clean `node --check` all the way to prod, then throws
+ * ReferenceError on the first real dispatch. Constructing this object evaluates each binding,
+ * so the wiring test fails loudly if one of them stops existing.
+ */
+export function productionReindexDeps() {
+  return {
+    listJobs,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+}
+
+export async function run(plan, deps) {
   const { repos, targets, instances, reindex } = plan;
   const {
     cloneTree,
     runSync,
     runReindex,
-    reindexInFlight,
+    awaitSlot,
     log = console.log,
     error = console.error,
   } = deps;
@@ -183,13 +237,7 @@ export function run(plan, deps) {
     for (const instance of instances) {
       log(`\n=== reindex ${instance} ===`);
       try {
-        if (reindexInFlight && reindexInFlight(instance)) {
-          log(
-            `  reindex already in flight for ${instance}; skipping dispatch so the running ` +
-              "job is not superseded. reindex-settle fires the trailing pass.",
-          );
-          continue;
-        }
+        if (awaitSlot) await awaitSlot(instance);
         runReindex(instance);
       } catch (err) {
         failedReindex.push(instance);
@@ -217,7 +265,7 @@ function loadConfig() {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function main() {
+async function main() {
   const cfg = loadConfig();
   const allTargets = Object.keys(cfg.targets || {});
   const opts = parseArgs(process.argv.slice(2), allTargets);
@@ -236,7 +284,7 @@ function main() {
   console.log(`Corpus root: ${root}`);
   console.log(`Org: ${org}`);
 
-  const result = run(
+  const result = await run(
     { repos, targets: opts.targets, instances, reindex: opts.reindex },
     {
       cloneTree: (repo) => syncRepoTree(org, repo, root, authArgs),
@@ -247,11 +295,11 @@ function main() {
           env: { ...process.env, SYNC_REPO_ROOT: root },
         }),
       runReindex: reindexInstance,
-      reindexInFlight: reindexInFlightForInstance,
+      awaitSlot: (instance) => awaitReindexSlot(instance, productionReindexDeps()),
     },
   );
   process.exit(result.exitCode);
 }
 
 const invokedDirectly = process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url);
-if (invokedDirectly) main();
+if (invokedDirectly) await main();
