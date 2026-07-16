@@ -125,10 +125,14 @@ the workflow concurrency group, and GitHub keeps only the newest queued run, so 
 it collapse instead of each firing their own reindex.
 
 Each wait has its own budget (10 min in-flight, 10 min cooldown) rather than one shared
-deadline, because the worst healthy case is roughly 6 min waiting on a large reindex plus up to
-7 min of cooldown. Cooldown clears well inside that, so ordinary bursts never go red. If a
-budget is exhausted the run fails loudly and says what it means: the R2 corpus uploaded fine,
-nothing is lost, the index lags until the next sync or the daily backstop.
+deadline, since the two are additive on a perfectly healthy path: a run can wait minutes for an
+in-flight reindex and then still owe a cooldown wait.
+
+The measured cooldown is short (rejected at 10s after a job ends, accepted at 32s), so the
+budgets are far larger than they need to be today. That is deliberate. The measurement is an
+observation, not a contract, and a budget sized to it would turn ordinary upstream variance into
+red builds. If a budget is exhausted the run fails loudly and says what it means: the R2 corpus
+uploaded fine, nothing is lost, the index lags until the next sync or the daily backstop.
 
 ## Ask widget
 

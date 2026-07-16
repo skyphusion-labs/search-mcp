@@ -155,10 +155,15 @@ function listJobs(instance) {
   return JSON.parse(out);
 }
 
-// Two independent budgets, deliberately NOT one shared deadline. Measured worst case on the
-// biggest corpus: ~6 min waiting for an in-flight reindex, then up to ~7 min of AI Search
-// cooldown before a new job is accepted. A single 10 min bound would fail loud at ~13 min of
-// entirely healthy waiting, so each phase gets its own budget.
+// Two independent budgets, deliberately NOT one shared deadline: the phases are additive on a
+// healthy path (wait out an in-flight reindex, ~6 min on the biggest corpus, and THEN still owe
+// a cooldown wait), so one shared bound would fail a run that did nothing wrong.
+//
+// Both budgets are far larger than the measured cooldown (rejected 10s after a job ends,
+// accepted at 32s; 2026-07-16). That is intentional. The measurement is an observation, not a
+// contract Cloudflare owes us, and it may move with corpus size or load. Sizing to today's
+// number would convert ordinary upstream variance into red builds; sizing in minutes costs
+// nothing when the cooldown is short, because the retry clears and the run moves on.
 export const REINDEX_INFLIGHT_TIMEOUT_MS = 10 * 60 * 1000;
 export const REINDEX_COOLDOWN_TIMEOUT_MS = 10 * 60 * 1000;
 export const REINDEX_POLL_MS = 15 * 1000;
@@ -166,7 +171,7 @@ export const REINDEX_POLL_MS = 15 * 1000;
 /**
  * AI Search refuses a new job for a cooldown window after the previous one ENDS, distinct from
  * the job being in flight. Measured 2026-07-16: rejected 10s after a job ended, accepted at
- * 6m45s. Waiting for `ended_at` alone is necessary but not sufficient.
+ * 32s. Waiting for `ended_at` alone is necessary but not sufficient.
  */
 export function isCooldownError(err) {
   const text = `${err?.stdout || ""}${err?.stderr || ""}${err?.message || ""}`;

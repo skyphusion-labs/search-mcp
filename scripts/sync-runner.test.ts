@@ -317,22 +317,28 @@ describe("dispatchWithCooldownRetry (#12)", () => {
 });
 
 describe("reindex bound math", () => {
-  // The trap: one shared deadline would fail loud on a HEALTHY path. Measured worst case is
-  // ~6 min waiting on an in-flight internal reindex plus up to ~7 min of AI Search cooldown,
-  // i.e. ~13 min of entirely legitimate waiting. The phases must be budgeted independently.
+  // The trap: one shared deadline would fail loud on a HEALTHY path, because the two waits are
+  // additive (wait out an in-flight reindex, then still owe a cooldown wait).
+  //
+  // WORST_INFLIGHT_MS is measured (internal reindex ran 4m01s / 5m05s / 5m44s on 2026-07-16).
+  // COOLDOWN_MARGIN_MS is NOT a measurement: the observed cooldown is far shorter (rejected at
+  // 10s after a job end, accepted at 32s). It is the margin we choose to design to, because the
+  // observation is not a contract Cloudflare owes us and may move with corpus size or load.
+  // Asserting against the margin rather than the observation is what keeps ordinary upstream
+  // variance from turning into red builds.
   const WORST_INFLIGHT_MS = 6 * 60 * 1000;
-  const WORST_COOLDOWN_MS = 7 * 60 * 1000;
+  const COOLDOWN_MARGIN_MS = 7 * 60 * 1000;
 
   it("budgets each phase separately, not one shared deadline", () => {
     expect(REINDEX_INFLIGHT_TIMEOUT_MS).toBeGreaterThan(WORST_INFLIGHT_MS);
-    expect(REINDEX_COOLDOWN_TIMEOUT_MS).toBeGreaterThan(WORST_COOLDOWN_MS);
+    expect(REINDEX_COOLDOWN_TIMEOUT_MS).toBeGreaterThan(COOLDOWN_MARGIN_MS);
   });
 
   it("a single shared bound would have been too small for the healthy worst case", () => {
     // Documents why this is two budgets: the sum exceeds either one alone.
-    expect(WORST_INFLIGHT_MS + WORST_COOLDOWN_MS).toBeGreaterThan(REINDEX_INFLIGHT_TIMEOUT_MS);
+    expect(WORST_INFLIGHT_MS + COOLDOWN_MARGIN_MS).toBeGreaterThan(REINDEX_INFLIGHT_TIMEOUT_MS);
     expect(REINDEX_INFLIGHT_TIMEOUT_MS + REINDEX_COOLDOWN_TIMEOUT_MS).toBeGreaterThan(
-      WORST_INFLIGHT_MS + WORST_COOLDOWN_MS,
+      WORST_INFLIGHT_MS + COOLDOWN_MARGIN_MS,
     );
   });
 });
