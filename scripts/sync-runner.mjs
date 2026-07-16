@@ -129,6 +129,15 @@ export function jobInFlight(jobs) {
   return (jobs || []).some((job) => !job.ended_at);
 }
 
+function listJobs(instance) {
+  const out = execFileSync(
+    "npx",
+    ["wrangler", "ai-search", "jobs", "list", instance, "--json"],
+    { cwd: REPO, encoding: "utf8" },
+  );
+  return JSON.parse(out);
+}
+
 export const REINDEX_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 export const REINDEX_POLL_MS = 15 * 1000;
 
@@ -169,6 +178,22 @@ export async function awaitReindexSlot(instance, deps) {
     await sleep(pollMs);
   }
   return { waited, timedOut: false };
+}
+
+/**
+ * The real dependencies main() hands to awaitReindexSlot.
+ *
+ * Exported and built here on purpose. Every other seam in this file is injected, so a unit
+ * suite full of stubs proves nothing about the production wiring: an undefined symbol here
+ * rides a green suite and a clean `node --check` all the way to prod, then throws
+ * ReferenceError on the first real dispatch. Constructing this object evaluates each binding,
+ * so the wiring test fails loudly if one of them stops existing.
+ */
+export function productionReindexDeps() {
+  return {
+    listJobs,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
 }
 
 export async function run(plan, deps) {
@@ -270,11 +295,7 @@ async function main() {
           env: { ...process.env, SYNC_REPO_ROOT: root },
         }),
       runReindex: reindexInstance,
-      awaitSlot: (instance) =>
-        awaitReindexSlot(instance, {
-          listJobs,
-          sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-        }),
+      awaitSlot: (instance) => awaitReindexSlot(instance, productionReindexDeps()),
     },
   );
   process.exit(result.exitCode);

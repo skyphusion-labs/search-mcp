@@ -8,6 +8,7 @@ import {
   describeExit,
   jobInFlight,
   awaitReindexSlot,
+  productionReindexDeps,
   run,
 } from "./sync-runner.mjs";
 
@@ -206,5 +207,22 @@ describe("run reindex ordering (#12)", () => {
       error: quiet,
     });
     expect(runReindex).toHaveBeenCalledExactlyOnceWith("search-alpha");
+  });
+});
+
+describe("production wiring", () => {
+  // Regression guard. Every seam in sync-runner is injected, so the stubs in this file say
+  // nothing about what main() actually constructs. Ripping out reindex-settle deleted the
+  // module-scope listJobs while main still referenced it: tests green, `node --check` clean,
+  // and the first real dispatch would have thrown ReferenceError. Building the dep object
+  // here evaluates every binding, so that failure surfaces in CI instead of in production.
+  it("builds main's reindex deps with no undefined symbols", () => {
+    const deps = productionReindexDeps();
+    expect(typeof deps.listJobs).toBe("function");
+    expect(typeof deps.sleep).toBe("function");
+  });
+
+  it("wires a sleep that actually resolves", async () => {
+    await expect(productionReindexDeps().sleep(1)).resolves.toBeUndefined();
   });
 });
