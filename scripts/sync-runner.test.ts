@@ -8,7 +8,11 @@ import {
   describeExit,
   jobInFlight,
   awaitReindexSlot,
+  dispatchWithCooldownRetry,
+  isCooldownError,
   productionReindexDeps,
+  REINDEX_INFLIGHT_TIMEOUT_MS,
+  REINDEX_COOLDOWN_TIMEOUT_MS,
   run,
 } from "./sync-runner.mjs";
 
@@ -224,5 +228,139 @@ describe("production wiring", () => {
 
   it("wires a sleep that actually resolves", async () => {
     await expect(productionReindexDeps().sleep(1)).resolves.toBeUndefined();
+  });
+});
+
+describe("isCooldownError", () => {
+  // Shape taken verbatim from a real failed run (2026-07-16 21:19:21Z).
+  const real = Object.assign(new Error("Command failed"), {
+    stderr:
+      "✘ [ERROR] A request to the Cloudflare API (/accounts/x/ai-search/namespaces/default/" +
+      "instances/skyphusion-internal/jobs) failed.\n\n  sync_in_cooldown [code: 7020]\n",
+  });
+
+  it("recognizes the real wrangler cooldown failure", () => {
+    expect(isCooldownError(real)).toBe(true);
+  });
+
+  it("matches on the bare code too", () => {
+    expect(isCooldownError({ message: "code: 7020" })).toBe(true);
+  });
+
+  it("does not swallow unrelated failures", () => {
+    expect(isCooldownError(new Error("ENOTFOUND api.cloudflare.com"))).toBe(false);
+    expect(isCooldownError({ stderr: "authentication error [code: 10000]" })).toBe(false);
+    expect(isCooldownError(undefined)).toBe(false);
+  });
+});
+
+describe("dispatchWithCooldownRetry (#12)", () => {
+  const quiet = () => {};
+  const cooldown = () =>
+    Object.assign(new Error("Command failed"), { stderr: "sync_in_cooldown [code: 7020]" });
+
+  it("dispatches once when there is no cooldown", async () => {
+    const runReindexOnce = vi.fn();
+    const r = await dispatchWithCooldownRetry("search-alpha", {
+      runReindexOnce,
+      sleep: vi.fn(),
+      log: quiet,
+    });
+    expect(runReindexOnce).toHaveBeenCalledExactlyOnceWith("search-alpha");
+    expect(r.retried).toBe(false);
+  });
+
+  it("retries through cooldown and succeeds once it clears", async () => {
+    let n = 0;
+    const runReindexOnce = vi.fn(() => {
+      if (++n <= 3) throw cooldown();
+    });
+    const r = await dispatchWithCooldownRetry("search-alpha", {
+      runReindexOnce,
+      sleep: async () => {},
+      log: quiet,
+    });
+    expect(runReindexOnce).toHaveBeenCalledTimes(4);
+    expect(r.retried).toBe(true);
+  });
+
+  it("rethrows a non-cooldown failure immediately without retrying", async () => {
+    const runReindexOnce = vi.fn(() => {
+      throw new Error("authentication error [code: 10000]");
+    });
+    await expect(
+      dispatchWithCooldownRetry("search-alpha", {
+        runReindexOnce,
+        sleep: async () => {},
+        log: quiet,
+      }),
+    ).rejects.toThrow(/authentication/);
+    expect(runReindexOnce).toHaveBeenCalledOnce();
+  });
+
+  it("fails loud past the bound, and the message carries the blast radius", async () => {
+    let clock = 0;
+    await expect(
+      dispatchWithCooldownRetry("skyphusion-internal", {
+        runReindexOnce: () => {
+          throw cooldown();
+        },
+        sleep: async () => {
+          clock += 15_000;
+        },
+        now: () => clock,
+        timeoutMs: 60_000,
+        log: quiet,
+      }),
+    ).rejects.toThrow(/no data is lost[\s\S]*next sync or the daily backstop/);
+  });
+});
+
+describe("reindex bound math", () => {
+  // The trap: one shared deadline would fail loud on a HEALTHY path. Measured worst case is
+  // ~6 min waiting on an in-flight internal reindex plus up to ~7 min of AI Search cooldown,
+  // i.e. ~13 min of entirely legitimate waiting. The phases must be budgeted independently.
+  const WORST_INFLIGHT_MS = 6 * 60 * 1000;
+  const WORST_COOLDOWN_MS = 7 * 60 * 1000;
+
+  it("budgets each phase separately, not one shared deadline", () => {
+    expect(REINDEX_INFLIGHT_TIMEOUT_MS).toBeGreaterThan(WORST_INFLIGHT_MS);
+    expect(REINDEX_COOLDOWN_TIMEOUT_MS).toBeGreaterThan(WORST_COOLDOWN_MS);
+  });
+
+  it("a single shared bound would have been too small for the healthy worst case", () => {
+    // Documents why this is two budgets: the sum exceeds either one alone.
+    expect(WORST_INFLIGHT_MS + WORST_COOLDOWN_MS).toBeGreaterThan(REINDEX_INFLIGHT_TIMEOUT_MS);
+    expect(REINDEX_INFLIGHT_TIMEOUT_MS + REINDEX_COOLDOWN_TIMEOUT_MS).toBeGreaterThan(
+      WORST_INFLIGHT_MS + WORST_COOLDOWN_MS,
+    );
+  });
+});
+
+describe("reindex-only mode", () => {
+  const quiet = () => {};
+
+  it("skips clone and sync but still reindexes", async () => {
+    const cloneTree = vi.fn();
+    const runSync = vi.fn();
+    const runReindex = vi.fn();
+    const res = await run(
+      { repos: ["a"], targets: ["alpha"], instances: ["search-alpha"], reindex: true, sync: false },
+      { cloneTree, runSync, runReindex, log: quiet, error: quiet },
+    );
+    expect(cloneTree).not.toHaveBeenCalled();
+    expect(runSync).not.toHaveBeenCalled();
+    expect(runReindex).toHaveBeenCalledExactlyOnceWith("search-alpha");
+    expect(res.exitCode).toBe(0);
+  });
+
+  it("parseArgs maps --reindex-only to sync:false, reindex:true", () => {
+    const o = parseArgs(["--reindex-only"], ["alpha"]);
+    expect(o.sync).toBe(false);
+    expect(o.reindex).toBe(true);
+  });
+
+  it("parseArgs defaults to sync:true", () => {
+    expect(parseArgs([], ["alpha"]).sync).toBe(true);
   });
 });

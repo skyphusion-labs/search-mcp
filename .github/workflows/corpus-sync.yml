@@ -32,7 +32,7 @@ jobs:
   sync:
     if: github.repository == 'skyphusion-labs/search-mcp'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -52,7 +52,7 @@ jobs:
           key: corpus-${{ runner.os }}-${{ hashFiles('scripts/targets.json') }}
           restore-keys: |
             corpus-${{ runner.os }}-
-      - name: Sync corpus and reindex
+      - name: Sync corpus to R2
         env:
           CORPUS_ROOT: ${{ vars.CORPUS_ROOT || format('{0}/.corpus', github.workspace) }}
           CORPUS_GIT_ORG: skyphusion-labs
@@ -61,4 +61,13 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/sync-runner.mjs
+        run: node scripts/sync-runner.mjs --no-reindex
+      # Separate step on purpose: if AI Search blocks the dispatch, the red lands here and the
+      # green upload step above says plainly that the R2 corpus is fine.
+      - name: Reindex AI Search
+        env:
+          CORPUS_ROOT: ${{ vars.CORPUS_ROOT || format('{0}/.corpus', github.workspace) }}
+          CORPUS_GIT_ORG: skyphusion-labs
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/sync-runner.mjs --reindex-only
