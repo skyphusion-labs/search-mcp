@@ -116,9 +116,42 @@ function reindexInstance(instance) {
   });
 }
 
+/**
+ * True when any reindex job for the instance is still running. AI Search reports an
+ * unfinished job as `ended_at: null`.
+ *
+ * Firing a job while one is in flight does not queue it: Cloudflare ends the running job
+ * with `end_reason: "new_job_has_started"` and starts over. On the biggest corpus the
+ * reindex outlives the sync that triggers it, so an unguarded dispatch during a merge burst
+ * restarts the index pass repeatedly and it never settles (#12).
+ */
+export function jobInFlight(jobs) {
+  return (jobs || []).some((job) => !job.ended_at);
+}
+
+function listJobs(instance) {
+  const out = execFileSync(
+    "npx",
+    ["wrangler", "ai-search", "jobs", "list", instance, "--json"],
+    { cwd: REPO, encoding: "utf8" },
+  );
+  return JSON.parse(out);
+}
+
+function reindexInFlightForInstance(instance) {
+  return jobInFlight(listJobs(instance));
+}
+
 export function run(plan, deps) {
   const { repos, targets, instances, reindex } = plan;
-  const { cloneTree, runSync, runReindex, log = console.log, error = console.error } = deps;
+  const {
+    cloneTree,
+    runSync,
+    runReindex,
+    reindexInFlight,
+    log = console.log,
+    error = console.error,
+  } = deps;
 
   log(`Refreshing ${repos.length} repo tree(s) ...`);
   const failedClones = [];
@@ -150,6 +183,13 @@ export function run(plan, deps) {
     for (const instance of instances) {
       log(`\n=== reindex ${instance} ===`);
       try {
+        if (reindexInFlight && reindexInFlight(instance)) {
+          log(
+            `  reindex already in flight for ${instance}; skipping dispatch so the running ` +
+              "job is not superseded. reindex-settle fires the trailing pass.",
+          );
+          continue;
+        }
         runReindex(instance);
       } catch (err) {
         failedReindex.push(instance);
@@ -207,6 +247,7 @@ function main() {
           env: { ...process.env, SYNC_REPO_ROOT: root },
         }),
       runReindex: reindexInstance,
+      reindexInFlight: reindexInFlightForInstance,
     },
   );
   process.exit(result.exitCode);

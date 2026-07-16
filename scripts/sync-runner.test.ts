@@ -6,6 +6,7 @@ import {
   gitAuthArgs,
   scrubSecrets,
   describeExit,
+  jobInFlight,
   run,
 } from "./sync-runner.mjs";
 
@@ -75,5 +76,81 @@ describe("run", () => {
     });
     expect(res.exitCode).toBe(1);
     expect(runSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("jobInFlight", () => {
+  it("is true when a job has not ended", () => {
+    expect(jobInFlight([{ ended_at: null }])).toBe(true);
+  });
+
+  it("is false when every job has ended, and for an empty list", () => {
+    expect(jobInFlight([{ ended_at: "2026-07-16 19:35:43" }])).toBe(false);
+    expect(jobInFlight([])).toBe(false);
+  });
+});
+
+describe("run reindex guard (#12)", () => {
+  const plan = {
+    repos: ["a"],
+    targets: ["alpha"],
+    instances: ["search-alpha"],
+    reindex: true,
+  };
+  const quiet = () => {};
+
+  it("dispatches when no job is in flight", () => {
+    const runReindex = vi.fn();
+    const res = run(plan, {
+      cloneTree: () => "fetch",
+      runSync: vi.fn(),
+      runReindex,
+      reindexInFlight: () => false,
+      log: quiet,
+      error: quiet,
+    });
+    expect(runReindex).toHaveBeenCalledExactlyOnceWith("search-alpha");
+    expect(res.exitCode).toBe(0);
+  });
+
+  it("skips dispatch when a job is in flight, so the running job is not superseded", () => {
+    const runReindex = vi.fn();
+    const res = run(plan, {
+      cloneTree: () => "fetch",
+      runSync: vi.fn(),
+      runReindex,
+      reindexInFlight: () => true,
+      log: quiet,
+      error: quiet,
+    });
+    expect(runReindex).not.toHaveBeenCalled();
+    // A skip is not a failure: the corpus is in R2 and reindex-settle fires the trailing pass.
+    expect(res.exitCode).toBe(0);
+    expect(res.synced).toBe(true);
+  });
+
+  it("still syncs the corpus when the reindex dispatch is skipped", () => {
+    const runSync = vi.fn();
+    run(plan, {
+      cloneTree: () => "fetch",
+      runSync,
+      runReindex: vi.fn(),
+      reindexInFlight: () => true,
+      log: quiet,
+      error: quiet,
+    });
+    expect(runSync).toHaveBeenCalledExactlyOnceWith("alpha");
+  });
+
+  it("dispatches when no guard is injected, preserving prior behavior", () => {
+    const runReindex = vi.fn();
+    run(plan, {
+      cloneTree: () => "fetch",
+      runSync: vi.fn(),
+      runReindex,
+      log: quiet,
+      error: quiet,
+    });
+    expect(runReindex).toHaveBeenCalledExactlyOnceWith("search-alpha");
   });
 });

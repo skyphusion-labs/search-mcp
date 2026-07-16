@@ -1,0 +1,51 @@
+name: reindex-settle
+
+# Trailing reindex pass for the AI Search corpus. Production plumbing, NOT a CI gate: never add
+# it to required status checks.
+#
+# corpus-sync skips its reindex dispatch when a job is already in flight, so a running job is
+# never superseded (#12). That leaves a gap: the last merge of a burst can land in R2 while a
+# job is mid-run, and nothing would reindex it until the daily backstop. This job closes the gap
+# by firing exactly one reindex per instance once the corpus is quiet and the index is stale.
+#
+# It is state-aware, not clock-aware: it fires only when nothing is in flight AND a sync
+# completed after the newest job started. A single merge still reindexes immediately via
+# corpus-sync, so this is a safety net rather than the primary path.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: reindex-settle
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    if: github.repository == 'skyphusion-labs/search-mcp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Materialize production config
+        env:
+          SKYPHUSION_WRANGLER_TOML: ${{ secrets.SKYPHUSION_WRANGLER_TOML }}
+          SKYPHUSION_WRANGLER_MCP_TOML: ${{ secrets.SKYPHUSION_WRANGLER_MCP_TOML }}
+          SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
+        run: node scripts/materialize-config.mjs
+      - name: Settle reindex
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/reindex-settle.mjs
