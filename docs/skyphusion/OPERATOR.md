@@ -40,17 +40,20 @@ Wrangler runtime secrets (`MCP_TOKEN`, `TURNSTILE_SECRET`) stay on the Workers v
 
 - **Merge-driven:** each indexed repo dispatches `corpus-sync`, which syncs R2 and then
   reindexes both instances.
-- **Reindex guard:** `sync-runner` skips its dispatch when a job is already in flight for that
-  instance, so a running reindex is never superseded (#12). `skyphusion-internal` is the case
-  that matters: its reindex takes roughly 6 minutes, longer than a sync run, so an unguarded
-  dispatch during a merge burst restarted the index pass repeatedly. `skyphusion-public`
-  finishes in roughly 30 seconds and rarely trips the guard.
-- **Trailing pass:** `reindex-settle` (cron `*/5`) fires exactly one reindex per instance when
-  nothing is in flight and a sync completed after the newest job started. This covers the last
-  merge of a burst, whose dispatch the guard skipped.
+- **Reindex wait:** `sync-runner` waits for any in-flight reindex on that instance to finish
+  before dispatching, so a running job is never superseded (#12). `skyphusion-internal` is the
+  case that matters: its reindex takes roughly 6 minutes, longer than a sync run, so an
+  unguarded dispatch during a merge burst restarted the index pass repeatedly.
+  `skyphusion-public` finishes in roughly 30 seconds and rarely waits at all.
+- **Bounded:** the wait gives up after 10 minutes and dispatches anyway with a loud log line.
+  A reindex running that long is anomalous; the replacement job covers the full corpus.
+- **Burst coalescing:** a waiting run holds the `corpus-sync` concurrency group, and GitHub
+  keeps only the newest queued run, so a burst collapses to roughly one running plus one queued
+  instead of N reindexes.
 - **Daily backstop:** `corpus-sync` cron `17 7 * * *` UTC.
 
-A single merge still reindexes immediately; only bursts coalesce.
+Every merge still reindexes; the wait only changes *when* the dispatch lands, never whether it
+happens.
 
 ## Org secret (constellation repos)
 

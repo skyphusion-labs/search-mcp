@@ -110,27 +110,23 @@ The sync remaps non-native extensions (`.ts`, `.tsx`, extensionless `Dockerfile`
 
 ### Reindex dispatch
 
-`sync-runner` reindexes immediately after a successful sync, with one guard: if a reindex job is
-already in flight for that instance it **skips** the dispatch instead of firing into it. Firing
-into a running job does not queue behind it; Cloudflare ends the running job with
+`sync-runner` reindexes after a successful sync, with one guard: if a reindex job is already in
+flight for that instance it **waits** for it to finish before dispatching. Firing into a running
+job does not queue behind it; Cloudflare ends the running job with
 `end_reason: "new_job_has_started"` and restarts. On a large corpus the reindex can outlive the
-sync that triggered it, so an unguarded dispatch during a burst of merges restarts the index
-pass repeatedly and it never settles.
+sync that triggers it, so an unguarded dispatch during a burst of merges restarts the index pass
+repeatedly and it never settles.
 
-`scripts/reindex-settle.mjs` closes the gap that guard leaves. It fires exactly one reindex per
-instance when the corpus is quiet and the index is stale:
+Waiting (rather than skipping) means the job we start always lands strictly after our own
+upload, so it sees every object this run wrote. Merge bursts still coalesce: a waiting run holds
+the workflow concurrency group, and GitHub keeps only the newest queued run, so the runs behind
+it collapse instead of each firing their own reindex.
 
-```sh
-node scripts/reindex-settle.mjs --dry-run   # report the decision, dispatch nothing
-node scripts/reindex-settle.mjs             # fire where a pass is owed
-```
-
-It is state-aware rather than clock-aware, so a single merge still reindexes immediately and only
-bursts coalesce. It dispatches iff nothing is in flight **and** a sync completed after the newest
-job *started* (started, not ended: objects uploaded mid-job may not have been seen by it). The
-decision derives from the AI Search job list plus GitHub run history, so nothing is persisted.
-
-If you name a target `public`, optional boundary checks refuse overlap with `restrictedRepos` and can verify GitHub repo visibility before upload.
+The wait is bounded (10 minutes, comfortably longer than a full reindex). On timeout it
+dispatches anyway and logs loudly: a job running that long is anomalous, and the replacement
+reindexes the whole corpus, so superseding it is the correct recovery. The failure mode is
+deliberately "one supersession in a pathological case" rather than "the corpus quietly goes
+unindexed".
 
 ## Ask widget
 
