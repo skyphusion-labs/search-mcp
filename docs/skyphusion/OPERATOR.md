@@ -36,6 +36,22 @@ infra tier) and copied into GitHub Actions secrets on `search-mcp`:
 Wrangler runtime secrets (`MCP_TOKEN`, `TURNSTILE_SECRET`) stay on the Workers via
 `wrangler secret put` and persist across deploys.
 
+## Corpus freshness and reindex
+
+- **Merge-driven:** each indexed repo dispatches `corpus-sync`, which syncs R2 and then
+  reindexes both instances.
+- **Reindex guard:** `sync-runner` skips its dispatch when a job is already in flight for that
+  instance, so a running reindex is never superseded (#12). `skyphusion-internal` is the case
+  that matters: its reindex takes roughly 6 minutes, longer than a sync run, so an unguarded
+  dispatch during a merge burst restarted the index pass repeatedly. `skyphusion-public`
+  finishes in roughly 30 seconds and rarely trips the guard.
+- **Trailing pass:** `reindex-settle` (cron `*/5`) fires exactly one reindex per instance when
+  nothing is in flight and a sync completed after the newest job started. This covers the last
+  merge of a burst, whose dispatch the guard skipped.
+- **Daily backstop:** `corpus-sync` cron `17 7 * * *` UTC.
+
+A single merge still reindexes immediately; only bursts coalesce.
+
 ## Org secret (constellation repos)
 
 | Secret | Purpose |
