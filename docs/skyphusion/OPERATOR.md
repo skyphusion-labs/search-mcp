@@ -59,17 +59,28 @@ AI Search rejects a new job for **two different reasons**, and both must be clea
 | --- | --- |
 | full internal reindex | 4m01s, 5m05s, 5m44s observed |
 | full public reindex | ~25 to 30s |
-| cooldown: dispatch 10s after job end | **rejected**, `sync_in_cooldown [code: 7020]` |
-| cooldown: dispatch 6m45s after job end | **accepted** |
+| cooldown: dispatch **10s** after job end | **rejected**, `sync_in_cooldown [code: 7020]` |
+| cooldown: dispatch **32s** after job end | **accepted** |
+| cooldown: dispatch 6m45s after job end | accepted |
 
-So the cooldown window is longer than 10s and shorter than 6m45s. It has not been pinned more
-precisely, and Cloudflare does not document a figure; treat 7 min as the working worst case.
+So the cooldown window is **longer than 10s and no longer than 32s**. Cloudflare does not
+document a figure and has not committed to one.
 
 ### Why the timeouts are what they are
 
 The two waits have **independent budgets** (10 min in-flight, 10 min cooldown), not one shared
-deadline. Worst healthy case is ~6 min waiting on an in-flight reindex plus ~7 min of cooldown,
-about 13 min of entirely legitimate waiting: a single 10 min bound would fail a healthy run.
+deadline. Two separate reasons:
+
+1. **They are additive on a healthy path.** A run can wait ~6 min for an in-flight reindex and
+   then still owe a cooldown wait. One shared 10 min bound would fail a run that did nothing
+   wrong.
+2. **The budgets are deliberately far larger than the measured window**, and that is not
+   sloppiness. The 32s figure is an observation, not a contract: Cloudflare does not owe us 32s
+   forever, and the cooldown may vary with corpus size, load, or a future change. A budget sized
+   to today's measurement would turn ordinary upstream variance into red builds. Sizing it in
+   minutes costs nothing when the cooldown is short (the retry clears and the run moves on) and
+   absorbs the variance when it is not.
+
 Job `timeout-minutes` is 45 to leave room for both instances.
 
 ### Failure behavior
