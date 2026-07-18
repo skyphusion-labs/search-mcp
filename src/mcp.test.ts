@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { matchConsumer, mapSearchChunks } from "./mcp";
+import { matchConsumer, mapSearchChunks, shapeResults } from "./mcp";
 import mcp from "./mcp";
-import type { McpEnv } from "./env";
+import type { McpEnv, SearchResultChunk } from "./env";
 
 describe("mapSearchChunks", () => {
   it("prefers ingest metadata path over remapped object keys", () => {
@@ -34,6 +34,70 @@ describe("mapSearchChunks", () => {
     ]);
     expect(out[0]?.repo).toBe("fleet-chezmoi");
     expect(out[0]?.path).toBe("docs/README.md");
+    expect(out[0]).not.toHaveProperty("updated");
+  });
+
+  it("surfaces the item timestamp as `updated` when present", () => {
+    const out = mapSearchChunks([
+      {
+        id: "3",
+        type: "text",
+        score: 0.8,
+        text: "recent",
+        item: { key: "postern/README.md", timestamp: 1784300000000 },
+      },
+    ]);
+    expect(out[0]?.updated).toBe(1784300000000);
+  });
+});
+
+describe("shapeResults", () => {
+  const chunk = (repo: string, path: string, score: number): SearchResultChunk => ({
+    repo,
+    path,
+    score,
+    text: `${repo}/${path}@${score}`,
+  });
+
+  it("caps chunks per (repo, path) at 2 and backfills from other files", () => {
+    const out = shapeResults(
+      [
+        chunk("a", "big.md", 0.9),
+        chunk("a", "big.md", 0.89),
+        chunk("a", "big.md", 0.88),
+        chunk("b", "other.md", 0.5),
+      ],
+      undefined,
+      8,
+    );
+    expect(out.map((c) => c.text)).toEqual([
+      "a/big.md@0.9",
+      "a/big.md@0.89",
+      "b/other.md@0.5",
+    ]);
+  });
+
+  it("filters by exact repo names when `repos` is given", () => {
+    const out = shapeResults(
+      [chunk("postern", "a.md", 0.9), chunk("prism", "b.md", 0.8), chunk("postern", "c.md", 0.7)],
+      ["postern"],
+      8,
+    );
+    expect(out.map((c) => c.repo)).toEqual(["postern", "postern"]);
+  });
+
+  it("truncates to max after filtering and dedup", () => {
+    const out = shapeResults(
+      [chunk("a", "1.md", 0.9), chunk("a", "2.md", 0.8), chunk("a", "3.md", 0.7)],
+      undefined,
+      2,
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it("treats an empty repos array as no filter", () => {
+    const out = shapeResults([chunk("a", "1.md", 0.9)], [], 8);
+    expect(out).toHaveLength(1);
   });
 });
 
