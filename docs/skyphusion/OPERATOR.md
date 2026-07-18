@@ -190,9 +190,10 @@ custom_domain = true
 
 ## SKYPHUSION_TARGETS_JSON
 
-Internal repos (indexed only in the internal target): `crew-bus`, `crew-secrets`,
+Internal repos (indexed only in the internal target): `crew-secrets`,
 `fleet-chezmoi`. Everything else in the org that is public (or soon public) is in
-the public target. `rockenhaus-litigation`, `skyphusion-search`, `infra`, and `swarm-iac`
+the public target; classification follows GitHub visibility (`crew-bus` is public
+on GitHub and was reclassified into the public target 2026-07-18). `rockenhaus-litigation`, `skyphusion-search`, `infra`, and `swarm-iac`
 are excluded, as are archived repos (`ops` dropped 2026-07-18 when it was archived; the
 mirror-prune sync removes a dropped repo's corpus automatically).
 
@@ -205,7 +206,6 @@ mirror-prune sync removes a dropped repo's corpus automatically).
     ]
   },
   "restrictedRepos": [
-    "crew-bus",
     "crew-secrets",
     "fleet-chezmoi"
   ],
@@ -216,6 +216,7 @@ mirror-prune sync removes a dropped repo's corpus automatically).
       "repos": [
         ".github",
         "common-thread",
+        "crew-bus",
         "hollow-grid-c",
         "hollow-grid-go",
         "hollow-grid-py",
