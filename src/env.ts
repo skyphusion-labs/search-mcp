@@ -47,6 +47,8 @@ export interface SearchResultChunk {
   path: string;
   score: number;
   text: string;
+  // R2 object timestamp (epoch ms) when AI Search surfaces it; consumers can weigh recency.
+  updated?: number;
 }
 
 export interface AiSearchSearchResponse {

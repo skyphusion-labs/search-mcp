@@ -4,14 +4,22 @@ import type { McpEnv, AiSearchChunk, SearchResultChunk } from "./env";
 // AI Search instance. Deploy separately from the public /ask query Worker when you want
 // machine-to-machine retrieval without exposing the corpus through a browser widget.
 
-const SERVER_INFO = { name: "search-mcp", version: "0.1.0" };
+const SERVER_INFO = { name: "search-mcp", version: "0.2.0" };
 const PROTOCOL_VERSION = "2025-06-18";
+
+// At most this many chunks per (repo, path) survive dedup; the rest of the budget
+// backfills from other files so one long document cannot saturate the result set.
+const MAX_CHUNKS_PER_PATH = 2;
+// Upstream fetch ceiling (AI Search caps max_num_results at 50). We over-fetch so
+// dedup and repo filtering can still fill the caller's requested count.
+const UPSTREAM_FETCH_CAP = 50;
 
 const SEARCH_TOOL = {
   name: "search",
   description:
     "Search the indexed corpus in Cloudflare AI Search. Returns the most relevant " +
-    "chunks with their source object keys and scores.",
+    "chunks with their source object keys and scores. Results are deduplicated to at " +
+    "most 2 chunks per file; pass `repos` to restrict results to specific repos.",
   inputSchema: {
     type: "object",
     properties: {
@@ -19,6 +27,13 @@ const SEARCH_TOOL = {
       max_num_results: {
         type: "number",
         description: "Maximum chunks to return (1-20, default 8).",
+      },
+      repos: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Optional repo-name filter (exact match on the corpus repo segment, " +
+          "e.g. [\"postern\", \"fleet-chezmoi\"]).",
       },
     },
     required: ["query"],
@@ -35,6 +50,10 @@ const SEARCH_TOOL = {
             path: { type: "string" },
             score: { type: "number" },
             text: { type: "string" },
+            updated: {
+              type: "number",
+              description: "Source object timestamp (epoch ms), when available.",
+            },
           },
           required: ["repo", "path", "score", "text"],
         },
@@ -55,13 +74,38 @@ export function mapSearchChunks(chunks: AiSearchChunk[]): SearchResultChunk[] {
     const meta = c.item?.metadata;
     const fromKey = chunkKeyParts(c.item?.key ?? "unknown");
     const path = meta?.path ?? fromKey.path.replace(/\.txt$/, "");
-    return {
+    const mapped: SearchResultChunk = {
       repo: meta?.repo ?? fromKey.repo,
       path,
       score: c.score,
       text: c.text,
     };
+    if (typeof c.item?.timestamp === "number") mapped.updated = c.item.timestamp;
+    return mapped;
   });
+}
+
+// Post-retrieval shaping: optional exact-match repo filter, then per-path dedup.
+// Chunks arrive score-ordered from AI Search, so keeping the first
+// MAX_CHUNKS_PER_PATH occurrences of each (repo, path) keeps the best ones.
+export function shapeResults(
+  chunks: SearchResultChunk[],
+  repos: string[] | undefined,
+  max: number,
+): SearchResultChunk[] {
+  const repoSet = repos?.length ? new Set(repos) : null;
+  const perPath = new Map<string, number>();
+  const out: SearchResultChunk[] = [];
+  for (const c of chunks) {
+    if (repoSet && !repoSet.has(c.repo)) continue;
+    const key = `${c.repo}/${c.path}`;
+    const seen = perPath.get(key) ?? 0;
+    if (seen >= MAX_CHUNKS_PER_PATH) continue;
+    perPath.set(key, seen + 1);
+    out.push(c);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 // MCP_TOKEN is either a single bare token (legacy, attributed as "default") or a
@@ -122,13 +166,23 @@ async function handleRpc(msg: RpcMessage, env: McpEnv): Promise<unknown> {
       const query = String(args.query ?? "").trim();
       if (!query) return rpcError(id, -32602, "Missing required argument 'query'");
       const max = Math.min(Math.max(Number(args.max_num_results) || 8, 1), 20);
+      const reposArg = args.repos;
+      if (
+        reposArg !== undefined &&
+        (!Array.isArray(reposArg) || reposArg.some((r) => typeof r !== "string"))
+      ) {
+        return rpcError(id, -32602, "'repos' must be an array of strings");
+      }
+      const repos = reposArg as string[] | undefined;
+      // Over-fetch so dedup and repo filtering can still fill `max` results.
+      const fetchN = Math.min(UPSTREAM_FETCH_CAP, Math.max(max * 4, 20));
       try {
         const res = await env.SEARCH.search({
           query,
-          ai_search_options: { retrieval: { retrieval_type: "hybrid", max_num_results: max } },
+          ai_search_options: { retrieval: { retrieval_type: "hybrid", max_num_results: fetchN } },
         });
         const chunks: AiSearchChunk[] = res.chunks || [];
-        const structured = mapSearchChunks(chunks);
+        const structured = shapeResults(mapSearchChunks(chunks), repos, max);
         const text = structured.length
           ? structured
               .map(

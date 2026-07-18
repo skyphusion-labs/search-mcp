@@ -191,9 +191,10 @@ custom_domain = true
 ## SKYPHUSION_TARGETS_JSON
 
 Internal repos (indexed only in the internal target): `crew-bus`, `crew-secrets`,
-`fleet-chezmoi`, `ops`. Everything else in the org that is public (or soon public) is in
+`fleet-chezmoi`. Everything else in the org that is public (or soon public) is in
 the public target. `rockenhaus-litigation`, `skyphusion-search`, `infra`, and `swarm-iac`
-are excluded.
+are excluded, as are archived repos (`ops` dropped 2026-07-18 when it was archived; the
+mirror-prune sync removes a dropped repo's corpus automatically).
 
 ```json
 {
@@ -206,8 +207,7 @@ are excluded.
   "restrictedRepos": [
     "crew-bus",
     "crew-secrets",
-    "fleet-chezmoi",
-    "ops"
+    "fleet-chezmoi"
   ],
   "targets": {
     "public": {
@@ -216,6 +216,7 @@ are excluded.
       "repos": [
         ".github",
         "common-thread",
+        "hollow-grid-c",
         "hollow-grid-go",
         "hollow-grid-py",
         "mud-bots",
@@ -231,11 +232,13 @@ are excluded.
         "vivijure",
         "vivijure-audio-upscale",
         "vivijure-backend",
+        "vivijure-cf",
         "vivijure-com",
         "vivijure-core",
         "vivijure-local",
         "vivijure-local-12gb",
         "vivijure-local-16gb",
+        "vivijure-mcp",
         "vivijure-musetalk",
         "vivijure-upscale"
       ]
@@ -249,10 +252,10 @@ are excluded.
         "crew-bus",
         "crew-secrets",
         "fleet-chezmoi",
+        "hollow-grid-c",
         "hollow-grid-go",
         "hollow-grid-py",
         "mud-bots",
-        "ops",
         "postern",
         "prism",
         "search-mcp",
@@ -265,11 +268,13 @@ are excluded.
         "vivijure",
         "vivijure-audio-upscale",
         "vivijure-backend",
+        "vivijure-cf",
         "vivijure-com",
         "vivijure-core",
         "vivijure-local",
         "vivijure-local-12gb",
         "vivijure-local-16gb",
+        "vivijure-mcp",
         "vivijure-musetalk",
         "vivijure-upscale"
       ]
