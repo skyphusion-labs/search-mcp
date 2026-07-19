@@ -23,15 +23,19 @@ jobs:
 
       - run: npm ci
 
+      # fc#864: env-indirect the tag (prism publish-npm pattern) — never interpolate
+      # maintainer-controlled tag text into the script body.
       - name: Verify package version matches release tag
         if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          tag="${{ github.event.release.tag_name }}"
-          tag="${tag#v}"
+          tag="$RELEASE_TAG"
+          tag_version="${tag#v}"
           pkg="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "Release tag v$tag does not match package.json version $pkg" >&2
+          if [ "$tag_version" != "$pkg" ]; then
+            echo "::error::Release tag $tag (version $tag_version) does not match package.json version $pkg" >&2
             exit 1
           fi
 

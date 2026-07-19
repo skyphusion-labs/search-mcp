@@ -1,8 +1,9 @@
 name: ci
 
 # PR + main gate (aviation-grade). Fork PRs run on GitHub-hosted runners without
-# Production deploy runs ONLY on a pushed version tag (v*), NEVER on a bare merge
-# to main. Cut a SemVer tag to ship: git tag -a v0.1.0 -m "..." && git push origin v0.1.0.
+# deploy secrets. Production deploy runs ONLY on a pushed version tag (v*), NEVER
+# on a bare merge to main. Cut a SemVer tag to ship:
+#   git tag -a v0.1.0 -m "..." && git push origin v0.1.0
 # GitHub-hosted runners (public repo; org fleet pool does not accept public-repo
 # jobs). Config materialized from GitHub secrets.
 
@@ -55,6 +56,23 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      # fc#864: tag vX.Y.Z must match package.json version X.Y.Z so /health cannot lie.
+      # Route the tag through env (not script interpolation) — prism publish-npm pattern.
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          tag_version="${tag#v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          echo "Tag:              $tag (version $tag_version)"
+          echo "package.json ver: $pkg_version"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::tag $tag (version $tag_version) does not match package.json version $pkg_version"
+            exit 1
+          fi
       - run: npm ci
       - name: Materialize production config
         env:
