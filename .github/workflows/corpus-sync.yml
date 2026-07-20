@@ -46,7 +46,7 @@ jobs:
           SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
         run: node scripts/materialize-config.mjs
       - name: Restore corpus clone cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .corpus
           key: corpus-${{ runner.os }}-${{ hashFiles('scripts/targets.json') }}
