@@ -82,6 +82,11 @@ export interface Env {
   GENERATION_MODEL: string;
   ASSISTANT_SYSTEM_PROMPT?: string;
   BLOG_ASSISTANT_SYSTEM_PROMPT?: string;
+  // JSON object mapping an exact request Origin to the system prompt for
+  // that site. Replaces a hardcoded origin list in src/index.ts, so serving
+  // another site becomes configuration rather than a code change. Malformed
+  // values are logged and ignored; the default prompt applies.
+  ORIGIN_PROFILES?: string;
 }
 
 export interface McpEnv {

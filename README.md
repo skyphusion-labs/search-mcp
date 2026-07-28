@@ -108,6 +108,58 @@ npm run sync:run     # isolated clone root, sync all targets, optional reindex
 
 The sync remaps non-native extensions (`.ts`, `.tsx`, extensionless `Dockerfile`, `.service`, etc.) to `.txt` keys so AI Search indexes them. See `scripts/sync-ingest.mjs`.
 
+### Bounding a corpus: `includePaths` vs `excludePaths`
+
+`excludePaths` is a denylist and is **fail-open**: add a new top-level file to a
+repo and it silently joins the corpus. That is fine for a docs site. It is wrong
+whenever the corpus boundary actually matters, because "we forgot to exclude it"
+becomes a real incident.
+
+`includePaths` is an allowlist and is **fail-closed**: when a repo has an entry,
+only paths under those prefixes are eligible and everything else is refused.
+
+```json
+{
+  "includePaths": { "my-repo": ["docs/", "_corpus/"] },
+  "excludePaths": { "my-repo": ["docs/internal/"] }
+}
+```
+
+Omit a repo from `includePaths` to keep the previous behaviour. Verify what a
+target will actually upload before you trust it:
+
+```sh
+node scripts/sync.mjs my-target --dry-run
+```
+
+### Size cap
+
+Objects over `SYNC_MAX_BYTES` (default 4 MB) are skipped. Skips are summarised at
+the end of the run, not only warned inline, because a file silently missing from
+the corpus looks exactly like a file the corpus does not contain -- the worst
+failure mode for something that answers questions. Pass `--fail-on-skip` to turn
+an incomplete corpus into a failed run.
+
+```sh
+SYNC_MAX_BYTES=$((16 * 1024 * 1024)) node scripts/sync.mjs corpus --fail-on-skip
+```
+
+### Corpus manifest (optional)
+
+A corpus producer can publish a `manifest.json` next to its objects so the widget
+renders citations instead of raw R2 keys. Entries need a `key`; `title`, `url`,
+`page`, and `total_pages` are used when present:
+
+```json
+{ "pages": [
+  { "key": "my-doc/p003.txt", "title": "Deploy guide", "url": "/docs/deploy/", "page": 3, "total_pages": 12 }
+] }
+```
+
+Keys are matched exactly first, then by **suffix**, because the sync namespaces
+every object under its repo name (`<repo>/<path>`) while a producer naturally
+writes its manifest in terms of its own paths.
+
 ### Reindex dispatch
 
 AI Search rejects a new reindex job for two distinct reasons, and `sync-runner` clears both
@@ -144,8 +196,29 @@ Copy `public/ask-widget.js` and `public/ask-widget.css` to your docs site:
         data-endpoint="https://search.example.com/ask"
         data-target="#docs-ask"
         data-label="Ask the docs"
+        data-manifest="/corpus-manifest.json"
+        data-empty-text="Nothing in the indexed corpus addresses that."
         data-sitekey="YOUR_TURNSTILE_SITEKEY"></script>
 ```
+
+`data-manifest` is optional; without it sources render as raw object keys. A
+missing or malformed manifest degrades to raw keys rather than breaking answers.
+
+`data-empty-text` is shown when a query returns no retrieved sources, so an
+unsourced answer is never left on screen looking authoritative.
+
+### Per-site system prompts
+
+One deployment can serve several sites. `ORIGIN_PROFILES` is a JSON object in
+`[vars]` mapping an exact request `Origin` to that site's system prompt:
+
+```toml
+ORIGIN_PROFILES = '{"https://docs.example.com":"You are the docs assistant...","https://other.example":"You are..."}'
+```
+
+Precedence is `ORIGIN_PROFILES`, then the legacy blog special-case, then
+`ASSISTANT_SYSTEM_PROMPT`. A malformed value is logged and ignored so a bad var
+cannot take `/ask` down.
 
 ## Who this is for
 
