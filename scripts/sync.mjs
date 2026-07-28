@@ -30,6 +30,7 @@ import {
 } from "./corpus-boundary.mjs";
 import {
   isIngestible,
+  isIncludedPath,
   shouldRemapToTxt,
   isNativeIngestPath,
   ingestObjectKey,
@@ -47,11 +48,18 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TARGETS_PATH = resolveTargetsPath(HERE);
 const REPO_ROOT = defaultRepoRoot(HERE, TARGETS_PATH);
-const MAX_BYTES = 4 * 1024 * 1024;
+// Objects larger than this are skipped. Configurable because the right value
+// depends on the corpus: 4 MB is fine for a source tree and wrong for scanned
+// PDFs, where the single largest document is often the one that matters most.
+// Skips are also summarised at the end of the run, not only warned inline: a
+// warning in a long CI log is a silent omission in practice.
+const MAX_BYTES = Number(process.env.SYNC_MAX_BYTES || 4 * 1024 * 1024);
 
 const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run");
 const SKIP_GITHUB = args.includes("--no-github-verify") || process.env.SYNC_SKIP_GITHUB_VERIFY === "1";
+// Opt-in strictness: turn an incomplete corpus into a failed run.
+const FAIL_ON_SKIP = args.includes("--fail-on-skip");
 const targetName = args.find((a) => !a.startsWith("--"));
 
 const SKIP_EXT = new Set([
@@ -123,7 +131,7 @@ function loadConfig() {
   return JSON.parse(readFileSync(TARGETS_PATH, "utf8"));
 }
 
-function planRepo(repo, excludePrefixes = []) {
+function planRepo(repo, excludePrefixes = [], includePrefixes = [], skipped = []) {
   const repoDir = join(REPO_ROOT, repo);
   if (!existsSync(repoDir)) {
     console.warn(`  ! skip ${repo}: not cloned at ${repoDir}`);
@@ -132,6 +140,9 @@ function planRepo(repo, excludePrefixes = []) {
   const items = [];
   for (const rel of trackedFiles(repoDir)) {
     if (shouldSkip(rel)) continue;
+    // Allowlist first: when a repo declares includePaths, anything outside them
+    // is not eligible for the corpus at all.
+    if (!isIncludedPath(rel, includePrefixes)) continue;
     if (isExcludedPath(rel, excludePrefixes)) continue;
     const abs = join(repoDir, rel);
     let size;
@@ -141,7 +152,10 @@ function planRepo(repo, excludePrefixes = []) {
       continue;
     }
     if (size > MAX_BYTES) {
-      console.warn(`  ! skip ${repo}/${rel}: ${(size / 1048576).toFixed(1)} MB over 4 MB`);
+      const mb = (size / 1048576).toFixed(1);
+      const capMb = (MAX_BYTES / 1048576).toFixed(1);
+      console.warn(`  ! skip ${repo}/${rel}: ${mb} MB over the ${capMb} MB cap`);
+      skipped.push({ repo, path: rel, mb });
       continue;
     }
     const sample = readTextSample(abs, size);
@@ -166,7 +180,9 @@ function planRepo(repo, excludePrefixes = []) {
 
 async function main() {
   if (!targetName) {
-    console.error("usage: node scripts/sync.mjs <target> [--dry-run] [--no-github-verify]");
+    console.error(
+      "usage: node scripts/sync.mjs <target> [--dry-run] [--no-github-verify] [--fail-on-skip]",
+    );
     process.exit(2);
   }
   const cfg = loadConfig();
@@ -195,12 +211,34 @@ async function main() {
   console.log(`Repo root: ${REPO_ROOT}${DRY ? "  [DRY RUN]" : ""}`);
 
   const plan = [];
+  const skipped = [];
   for (const repo of target.repos) {
-    const items = planRepo(repo, cfg.excludePaths?.[repo]);
+    const items = planRepo(
+      repo,
+      cfg.excludePaths?.[repo],
+      cfg.includePaths?.[repo],
+      skipped,
+    );
     if (items.length) console.log(`  + ${repo}: ${items.length} files`);
     plan.push(...items);
   }
   console.log(`Planned ${plan.length} objects for ${target.bucket}.`);
+
+  // Summarise oversize skips. A file silently missing from the corpus looks
+  // exactly like a file the corpus does not contain, which is the worst
+  // possible failure mode for something that answers questions.
+  if (skipped.length) {
+    console.warn(`\n  ! ${skipped.length} file(s) skipped for exceeding the size cap:`);
+    for (const s of skipped) console.warn(`      ${s.repo}/${s.path} (${s.mb} MB)`);
+    console.warn(
+      "    These are NOT in the corpus. Raise SYNC_MAX_BYTES, extract their text into\n" +
+        "    a smaller form, or accept that nothing can answer from them.",
+    );
+    if (FAIL_ON_SKIP) {
+      console.error("--fail-on-skip: refusing to continue with an incomplete corpus.");
+      process.exit(1);
+    }
+  }
 
   if (DRY) {
     for (const it of plan.slice(0, 25)) console.log(`    ${it.key}`);

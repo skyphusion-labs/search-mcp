@@ -16,6 +16,12 @@
   var label = script.getAttribute("data-label") || "Ask";
   var placeholder = script.getAttribute("data-placeholder") || "Ask a question about the docs";
   var sitekey = script.getAttribute("data-sitekey") || "";
+  // Optional corpus manifest: maps an R2 object key to a human title, a URL,
+  // and a page number, so sources render as citations instead of raw keys.
+  var manifestUrl = script.getAttribute("data-manifest") || "";
+  var emptyText =
+    script.getAttribute("data-empty-text") ||
+    "Nothing in the indexed corpus addresses that.";
 
   function ready(fn) {
     if (document.readyState !== "loading") fn();
@@ -69,6 +75,97 @@
       }
     }
 
+
+    // ---- corpus manifest -------------------------------------------------
+    //
+    // Without a manifest the widget can only show the R2 object key, which is
+    // an implementation detail ("repo/docs/DEPLOY.md"). With one it can show
+    // what a reader actually needs: the document title, a link, and a page.
+    //
+    // Entries are matched by exact key first, then by SUFFIX. Suffix matching
+    // matters because the sync prefixes every object with its repo name, so the
+    // key in R2 is "<repo>/<path>" while a corpus producer naturally writes its
+    // manifest in terms of its own paths. Suffix matching lets the producer stay
+    // ignorant of how the sync namespaces things.
+    var manifest = null;
+    var manifestIndex = null;
+
+    function indexManifest(data) {
+      var entries = [];
+      if (Array.isArray(data)) entries = data;
+      else if (data && Array.isArray(data.pages)) entries = data.pages;
+      else if (data && Array.isArray(data.objects)) entries = data.objects;
+      var byKey = {};
+      entries.forEach(function (e) {
+        if (e && typeof e.key === "string") byKey[e.key] = e;
+      });
+      return { byKey: byKey, entries: entries };
+    }
+
+    function loadManifest() {
+      if (!manifestUrl) return Promise.resolve(null);
+      if (manifest) return Promise.resolve(manifest);
+      return fetch(manifestUrl)
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (data) {
+          if (!data) return null;
+          manifest = data;
+          manifestIndex = indexManifest(data);
+          return data;
+        })
+        .catch(function () {
+          // A missing or broken manifest must not break answers. Degrade to
+          // showing raw keys rather than failing the request.
+          return null;
+        });
+    }
+
+    function lookup(key) {
+      if (!manifestIndex) return null;
+      if (manifestIndex.byKey[key]) return manifestIndex.byKey[key];
+      for (var i = 0; i < manifestIndex.entries.length; i++) {
+        var e = manifestIndex.entries[i];
+        if (e && typeof e.key === "string" && key.indexOf(e.key) >= 0) {
+          var at = key.length - e.key.length;
+          if (at >= 0 && key.slice(at) === e.key) return e;
+        }
+      }
+      return null;
+    }
+
+    function citationNode(key) {
+      var entry = lookup(key);
+      var li = document.createElement("li");
+      if (!entry) {
+        li.textContent = key;
+        return li;
+      }
+      var label = entry.title || key;
+      if (entry.url) {
+        var a = document.createElement("a");
+        a.setAttribute("href", entry.url);
+        a.textContent = label;
+        li.appendChild(a);
+      } else {
+        li.appendChild(document.createTextNode(label));
+      }
+      var bits = [];
+      if (entry.page) {
+        bits.push("page " + entry.page + (entry.total_pages ? " of " + entry.total_pages : ""));
+      }
+      if (entry.case_number) bits.push("case " + entry.case_number);
+      if (entry.filed_date) bits.push("filed " + entry.filed_date);
+      if (bits.length) {
+        var span = document.createElement("span");
+        span.className = "vjask-source-meta";
+        span.textContent = " (" + bits.join(", ") + ")";
+        li.appendChild(span);
+      }
+      return li;
+    }
+
     function renderSources(chunks) {
       var seen = {};
       var items = [];
@@ -80,12 +177,18 @@
         }
       });
       if (!items.length) return;
-      sources.innerHTML = "<li class='vjask-sources-title'>Sources</li>" +
-        items.map(function (k) {
-          return "<li>" + k.replace(/[&<>]/g, function (ch) {
-            return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch];
-          }) + "</li>";
-        }).join("");
+      sawSources = true;
+      // Built via the DOM API rather than innerHTML: entries come from the
+      // corpus manifest, and concatenating them into markup would be an
+      // injection path through a data file.
+      sources.textContent = "";
+      var title = document.createElement("li");
+      title.className = "vjask-sources-title";
+      title.textContent = "Sources";
+      sources.appendChild(title);
+      items.forEach(function (k) {
+        sources.appendChild(citationNode(k));
+      });
       sources.hidden = false;
     }
 
@@ -109,6 +212,8 @@
       if (delta && delta.content) answer.textContent += delta.content;
     }
 
+    var sawSources = false;
+
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var q = input.value.trim();
@@ -116,8 +221,10 @@
       btn.disabled = true;
       answer.textContent = "";
       sources.hidden = true;
-      sources.innerHTML = "";
+      sources.textContent = "";
+      sawSources = false;
 
+      loadManifest().then(function () {
       fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -153,6 +260,12 @@
           answer.textContent = "Sorry, something went wrong (" + err.message + ").";
         })
         .finally(function () {
+          // No retrieved sources means nothing in the corpus matched. Say that
+          // outright rather than leaving a plausible-looking unsourced answer
+          // on screen.
+          if (!sawSources && !answer.textContent.trim()) {
+            answer.textContent = emptyText;
+          }
           btn.disabled = false;
           if (sitekey && window.turnstile) {
             try {
@@ -160,6 +273,7 @@
             } catch (e) {}
           }
         });
+      });
     });
   });
 })();
