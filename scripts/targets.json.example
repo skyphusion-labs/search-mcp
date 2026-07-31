@@ -1,6 +1,7 @@
 {
   "_comment": "Copy to targets.json (./targets.json for npm CLI, or scripts/targets.json in a git clone). repos are directory names under SYNC_REPO_ROOT (default: cwd for npm, parent of this repo for dev clone). Only git-tracked files are uploaded.",
-  "_includePaths_comment": "ALLOWLIST, optional, per repo. When present, ONLY paths under these prefixes are eligible for the corpus and everything else is refused. Use it when the corpus boundary matters: a denylist is fail-OPEN, so a new top-level file silently joins the corpus, whereas an allowlist is fail-CLOSED. Omit for a repo to keep the old behaviour of admitting everything.",
+  "_includePaths_comment": "ALLOWLIST, optional, per repo. When present, ONLY paths under these prefixes are eligible for the corpus and everything else is refused. Use it when the corpus boundary matters: a denylist is fail-OPEN, so a new top-level file silently joins the corpus, whereas an allowlist is fail-CLOSED. Omit a repo to keep the old behaviour of admitting everything; an entry that is present but EMPTY is an error, not a way to index nothing.",
+  "_includePaths_refusals": "A present allowlist must earn its keep: an entry matching zero git-tracked files, an entry naming a repo no target lists, a repo whose clone is missing, or a selection that excludePaths or the ingest filters empty out all refuse the sync (exit 2). An allowlist that quietly matches nothing would prune a healthy corpus and reindex over the emptiness with every status light green.",
   "includePaths": {
     "example-repo": ["docs/"]
   },

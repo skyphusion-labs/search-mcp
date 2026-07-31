@@ -125,8 +125,39 @@ only paths under those prefixes are eligible and everything else is refused.
 }
 ```
 
-Omit a repo from `includePaths` to keep the previous behaviour. Verify what a
-target will actually upload before you trust it:
+The two compose subtractively: `includePaths` decides what is eligible, then
+`excludePaths` subtracts from that. A denylist entry can never add a path back.
+
+Omit a repo from `includePaths` to keep the previous behaviour. An entry that is
+present but **empty** (`[]`) is a configuration error, not a way to say "index
+nothing": those are different states and collapsing them into the permissive one
+is how a whole repo joins a corpus by accident.
+
+#### A present allowlist must earn its keep
+
+An allowlist that quietly matches nothing is worse than no allowlist. The sync
+plans zero objects, the mirror prune deletes the corpus that was there, the
+reindex succeeds over nothing, and the answer surface returns a confident nothing
+with every status light green. So each of these refuses the run (exit 2) before
+anything uploads or is pruned:
+
+| Refusal | Meaning |
+| --- | --- |
+| `include_paths_no_match` | An entry matched zero git-tracked files (a typo, or a directory that moved) |
+| `include_paths_entry_empty` | The entry is `[]` |
+| `include_paths_entry_invalid` | An entry cannot match a git path (absolute, `..`, backslash, non-string) |
+| `include_paths_entry_not_array` / `include_paths_not_object` | Wrong config shape |
+| `include_paths_unknown_repo` | The entry names a repo no target lists, so nothing reads it |
+| `include_paths_repo_not_cloned` | An allowlisted repo is missing from the clone root |
+| `include_paths_all_excluded` | `excludePaths` removed everything the allowlist selected |
+| `include_paths_all_filtered` | Nothing the allowlist selected survived the ingest filters |
+
+Shape and repo-name checks run for **every** target on every sync, not just the
+one being synced, so a rule that has rotted is caught by the next run of any
+target. A stale `excludePaths` repo name warns rather than refuses: denylist rot
+grows a corpus, allowlist rot empties one.
+
+Verify what a target will actually upload before you trust it:
 
 ```sh
 node scripts/sync.mjs my-target --dry-run

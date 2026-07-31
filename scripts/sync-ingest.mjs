@@ -123,19 +123,26 @@ export function ingestKind(relPath) {
   return DOC_EXT.has(ext) || basename(relPath).startsWith("README") ? "doc" : "code";
 }
 
+
 /**
- * Per-repo corpus exclusion (targets.json `excludePaths`). An entry is a repo-relative
- * path: with a trailing "/" it excludes the whole subtree; without, it excludes that
- * exact file or the subtree rooted at that name.
+ * One prefix rule, shared by the allowlist and the denylist so the two can
+ * never drift. An entry is a repo-relative path: with a trailing "/" it means
+ * the subtree, without one it means that exact file or the subtree rooted at
+ * that name (so "docs" matches "docs" and "docs/a.md" but never "docsite/a.md").
+ */
+export function matchesPathPrefix(relPath, prefix) {
+  if (typeof prefix !== "string" || prefix === "") return false;
+  if (prefix.endsWith("/")) return relPath.startsWith(prefix);
+  return relPath === prefix || relPath.startsWith(prefix + "/");
+}
+
+/**
+ * Per-repo corpus exclusion (targets.json `excludePaths`). Denylist, applied on
+ * top of the allowlist. Absent or empty means "exclude nothing".
  */
 export function isExcludedPath(relPath, prefixes) {
   for (const p of prefixes || []) {
-    if (!p) continue;
-    if (p.endsWith("/")) {
-      if (relPath.startsWith(p)) return true;
-    } else if (relPath === p || relPath.startsWith(p + "/")) {
-      return true;
-    }
+    if (matchesPathPrefix(relPath, p)) return true;
   }
   return false;
 }
@@ -143,29 +150,226 @@ export function isExcludedPath(relPath, prefixes) {
 /**
  * Per-repo corpus ALLOWLIST (targets.json `includePaths`). When a repo has an
  * entry, ONLY paths under one of its prefixes are eligible for the corpus;
- * everything else is refused. When a repo has no entry every path is eligible
- * and `excludePaths` alone applies, so this is backwards compatible.
+ * everything else is refused. When a repo has NO entry (undefined/null) every
+ * path is eligible and `excludePaths` alone applies, so a config that never
+ * mentions includePaths behaves exactly as it did before.
  *
  * Why both exist. A denylist is fail-OPEN: add a new top-level file to a repo
  * and it silently joins the corpus. That is fine for a docs site and wrong for
- * a corpus whose boundary matters -- a litigation archive, anything with a
+ * a corpus whose boundary matters -- a court-record mirror, anything with a
  * privileged directory, anything where "we forgot to exclude it" is an incident
  * rather than noise. An allowlist is fail-CLOSED: a new path is ineligible
  * until someone says otherwise.
  *
- * Prefix semantics match isExcludedPath: a trailing "/" means the subtree, and
- * a bare name matches that exact file or the subtree rooted at it.
+ * An entry that is PRESENT but empty (or malformed) matches nothing rather than
+ * everything. "The operator wrote an allowlist" and "the operator wrote no
+ * allowlist" are different states and must not collapse into the permissive
+ * one; the config validation below turns that state into a hard error before a
+ * sync ever reaches this matcher.
  */
 export function isIncludedPath(relPath, prefixes) {
-  // No allowlist configured for this repo: everything is eligible.
-  if (!prefixes || prefixes.length === 0) return true;
+  if (prefixes === undefined || prefixes === null) return true;
+  if (!Array.isArray(prefixes)) return false;
   for (const p of prefixes) {
-    if (!p) continue;
-    if (p.endsWith("/")) {
-      if (relPath.startsWith(p)) return true;
-    } else if (relPath === p || relPath.startsWith(p + "/")) {
-      return true;
-    }
+    if (matchesPathPrefix(relPath, p)) return true;
   }
   return false;
+}
+
+/**
+ * Thrown for every includePaths refusal. `code` names the specific state so a
+ * test can prove a failure happened for the stated reason and not by accident.
+ */
+export class IncludePathsError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "IncludePathsError";
+    this.code = code;
+  }
+}
+
+function describeType(v) {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "array";
+  return typeof v;
+}
+
+function q(v) {
+  return typeof v === "string" ? JSON.stringify(v) : describeType(v) + " " + JSON.stringify(v);
+}
+
+/** Every repo named by any target. An includePaths key outside this set reaches nothing. */
+export function knownTargetRepos(cfg) {
+  const repos = new Set();
+  for (const target of Object.values(cfg?.targets || {})) {
+    for (const repo of target?.repos || []) repos.add(repo);
+  }
+  return repos;
+}
+
+/** Shape check for one repo entry. Returns {code, message} objects, never throws. */
+export function validateIncludePathsEntry(repo, prefixes) {
+  const errors = [];
+  if (!Array.isArray(prefixes)) {
+    errors.push({
+      code: "include_paths_entry_not_array",
+      message:
+        `includePaths for repo ${q(repo)} must be an array of repo-relative path prefixes, ` +
+        `got ${describeType(prefixes)}. Shape: "includePaths": { "my-repo": ["_corpus/"] }.`,
+    });
+    return errors;
+  }
+  if (prefixes.length === 0) {
+    errors.push({
+      code: "include_paths_entry_empty",
+      message:
+        `includePaths for repo ${q(repo)} is an empty array, which is a configuration error, ` +
+        `not an instruction to index nothing. Remove the repo entry to index all of it, or ` +
+        `list the prefixes to index.`,
+    });
+    return errors;
+  }
+  for (const p of prefixes) {
+    if (typeof p !== "string" || p.trim() === "") {
+      errors.push({
+        code: "include_paths_entry_invalid",
+        message:
+          `includePaths for repo ${q(repo)} has entry ${q(p)}: entries must be non-empty strings.`,
+      });
+    } else if (p.startsWith("/")) {
+      errors.push({
+        code: "include_paths_entry_invalid",
+        message:
+          `includePaths for repo ${q(repo)} has entry ${q(p)}: entries are repo-relative and ` +
+          `must not start with "/". A git path never does, so this would match nothing.`,
+      });
+    } else if (p.split("/").includes("..")) {
+      errors.push({
+        code: "include_paths_entry_invalid",
+        message:
+          `includePaths for repo ${q(repo)} has entry ${q(p)}: ".." is not something a git path ` +
+          `can start with, so this would match nothing.`,
+      });
+    } else if (p.includes("\\")) {
+      errors.push({
+        code: "include_paths_entry_invalid",
+        message:
+          `includePaths for repo ${q(repo)} has entry ${q(p)}: git paths use "/" as the ` +
+          `separator, so a backslash would match nothing.`,
+      });
+    }
+  }
+  return errors;
+}
+
+/**
+ * Whole-config check for targets.json `includePaths`. Returns {code, message}
+ * objects, never throws, so a caller can report all of them at once.
+ *
+ * Rejects an entry naming a repo no target lists: a rule nothing reads is
+ * indistinguishable from a rule that works, which is how an allowlist rots.
+ */
+export function validateIncludePathsConfig(cfg) {
+  const errors = [];
+  const includePaths = cfg?.includePaths;
+  if (includePaths === undefined || includePaths === null) return errors;
+  if (typeof includePaths !== "object" || Array.isArray(includePaths)) {
+    errors.push({
+      code: "include_paths_not_object",
+      message:
+        `targets.json includePaths must be an object keyed by repo, got ` +
+        `${describeType(includePaths)}. Shape: "includePaths": { "my-repo": ["_corpus/"] }.`,
+    });
+    return errors;
+  }
+  const known = knownTargetRepos(cfg);
+  for (const [repo, prefixes] of Object.entries(includePaths)) {
+    if (!known.has(repo)) {
+      errors.push({
+        code: "include_paths_unknown_repo",
+        message:
+          `includePaths names repo ${q(repo)}, which no target lists in its repos. Nothing reads ` +
+          `that rule, and a rule nothing reads is indistinguishable from a rule that works. Add ` +
+          `the repo to a target or delete the entry. Repos across all targets: ` +
+          `${[...known].join(", ") || "(none)"}.`,
+      });
+    }
+    errors.push(...validateIncludePathsEntry(repo, prefixes));
+  }
+  return errors;
+}
+
+/** Fail-closed wrapper: throws IncludePathsError carrying the first code and every message. */
+export function assertIncludePathsConfig(cfg) {
+  const errors = validateIncludePathsConfig(cfg);
+  if (!errors.length) return;
+  throw new IncludePathsError(errors[0].code, errors.map((e) => e.message).join(" "));
+}
+
+/**
+ * excludePaths keys naming a repo no target lists. Denylist rot is quieter than
+ * allowlist rot (the corpus grows rather than empties), so this is a warning at
+ * the call site, not a refusal.
+ */
+export function unknownExcludePathsRepos(cfg) {
+  const excludePaths = cfg?.excludePaths;
+  if (!excludePaths || typeof excludePaths !== "object" || Array.isArray(excludePaths)) return [];
+  const known = knownTargetRepos(cfg);
+  return Object.keys(excludePaths).filter((repo) => !known.has(repo));
+}
+
+/**
+ * Pure path selection for one repo: allowlist first, then denylist on top, so
+ * the two compose as defense in depth rather than one replacing the other.
+ *
+ * `relPaths` is the repo git-tracked file list. Refuses, loudly:
+ *
+ *   include_paths_entry_*       the entry is malformed or empty
+ *   include_paths_no_match      an entry matched ZERO tracked files
+ *   include_paths_all_excluded  the allowlist matched, excludePaths took it all
+ *
+ * The zero-match refusal is the point of the whole mechanism. A prefix that
+ * matches nothing (a rename, a misspelling, a directory that moved) otherwise
+ * plans an empty corpus, the mirror prune deletes what was there, the reindex
+ * succeeds over nothing, and the answer surface returns a confident nothing with
+ * every status light green. Coverage is measured against the tracked list before
+ * exclusion, so "this prefix names nothing in the repo" stays a distinct
+ * diagnostic from "everything it named was excluded".
+ */
+export function selectRepoPaths(repo, relPaths, opts = {}) {
+  const { includePrefixes, excludePrefixes } = opts;
+  const paths = relPaths || [];
+  if (includePrefixes === undefined || includePrefixes === null) {
+    return paths.filter((rel) => !isExcludedPath(rel, excludePrefixes));
+  }
+
+  const shapeErrors = validateIncludePathsEntry(repo, includePrefixes);
+  if (shapeErrors.length) {
+    throw new IncludePathsError(shapeErrors[0].code, shapeErrors.map((e) => e.message).join(" "));
+  }
+
+  const unmatched = includePrefixes.filter((p) => !paths.some((rel) => matchesPathPrefix(rel, p)));
+  if (unmatched.length) {
+    throw new IncludePathsError(
+      "include_paths_no_match",
+      `includePaths for repo ${q(repo)} matched 0 git-tracked files: ` +
+        `${unmatched.map(q).join(", ")} (the repo has ${paths.length} tracked file(s)). ` +
+        `An allowlist entry that matches nothing would sync an empty corpus over a healthy one ` +
+        `and report success, so the sync refuses instead. Fix the prefix in targets.json ` +
+        `(repo-relative, trailing slash for a subtree), or drop the entry if the path is gone. ` +
+        `Only the prefixes named above matched nothing.`,
+    );
+  }
+
+  const included = paths.filter((rel) => isIncludedPath(rel, includePrefixes));
+  const kept = included.filter((rel) => !isExcludedPath(rel, excludePrefixes));
+  if (kept.length === 0) {
+    throw new IncludePathsError(
+      "include_paths_all_excluded",
+      `includePaths for repo ${q(repo)} selected ${included.length} file(s) and excludePaths ` +
+        `removed every one of them. That leaves nothing to sync for this repo, which is an ` +
+        `empty corpus dressed as a successful run. Widen includePaths or narrow excludePaths.`,
+    );
+  }
+  return kept;
 }

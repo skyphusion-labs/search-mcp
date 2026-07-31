@@ -114,6 +114,7 @@ materialized from GitHub secrets. Skyphusion operators: [docs/skyphusion/OPERATO
 | Symptom | Check |
 | --- | --- |
 | Empty search results | R2 objects present? `npx wrangler ai-search stats INSTANCE` |
+| Sync exits 2 with `include_paths_*` | An `includePaths` allowlist matched nothing, named an unknown repo, or was emptied by `excludePaths`. The message names the repo and the prefix; fix `targets.json` and re-run |
 | TypeScript not indexed | Sync remaps to `.txt`; re-run sync + reindex job |
 | MCP 401 | `MCP_TOKEN` set? Bearer header exact match? |
 | `/ask` 403 origin | `ALLOWED_ORIGINS` includes the page origin |
