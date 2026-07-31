@@ -139,3 +139,33 @@ export function isExcludedPath(relPath, prefixes) {
   }
   return false;
 }
+
+/**
+ * Per-repo corpus ALLOWLIST (targets.json `includePaths`). When a repo has an
+ * entry, ONLY paths under one of its prefixes are eligible for the corpus;
+ * everything else is refused. When a repo has no entry every path is eligible
+ * and `excludePaths` alone applies, so this is backwards compatible.
+ *
+ * Why both exist. A denylist is fail-OPEN: add a new top-level file to a repo
+ * and it silently joins the corpus. That is fine for a docs site and wrong for
+ * a corpus whose boundary matters -- a litigation archive, anything with a
+ * privileged directory, anything where "we forgot to exclude it" is an incident
+ * rather than noise. An allowlist is fail-CLOSED: a new path is ineligible
+ * until someone says otherwise.
+ *
+ * Prefix semantics match isExcludedPath: a trailing "/" means the subtree, and
+ * a bare name matches that exact file or the subtree rooted at it.
+ */
+export function isIncludedPath(relPath, prefixes) {
+  // No allowlist configured for this repo: everything is eligible.
+  if (!prefixes || prefixes.length === 0) return true;
+  for (const p of prefixes) {
+    if (!p) continue;
+    if (p.endsWith("/")) {
+      if (relPath.startsWith(p)) return true;
+    } else if (relPath === p || relPath.startsWith(p + "/")) {
+      return true;
+    }
+  }
+  return false;
+}

@@ -17,6 +17,50 @@ const BLOG_SYSTEM_PROMPT = [
   "Be concise and write in plain technical prose.",
 ].join(" ");
 
+/**
+ * Origin -> system prompt, from configuration rather than code.
+ *
+ * This Worker used to carry a hardcoded origin Set and an if/else to pick a
+ * prompt, which meant every new site served by the same deployment needed a
+ * code change and a redeploy. ORIGIN_PROFILES is a JSON object in vars mapping
+ * an exact origin to the system prompt for that site, so adding a site is
+ * configuration.
+ *
+ * Precedence: ORIGIN_PROFILES, then the legacy blog special-case (kept so
+ * existing deployments do not change behaviour), then the default.
+ *
+ * Parse failures are logged and ignored rather than thrown: a malformed var
+ * should degrade to the default prompt, not take /ask down.
+ */
+function originProfiles(env: Env): Record<string, string> {
+  if (!env.ORIGIN_PROFILES) return {};
+  try {
+    const parsed: unknown = JSON.parse(env.ORIGIN_PROFILES);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      console.log("ORIGIN_PROFILES is not a JSON object; ignoring");
+      return {};
+    }
+    const out: Record<string, string> = {};
+    for (const [origin, prompt] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof prompt === "string" && prompt.trim()) out[origin] = prompt.trim();
+    }
+    return out;
+  } catch (err) {
+    console.log("ORIGIN_PROFILES parse failed; ignoring", String(err));
+    return {};
+  }
+}
+
+/** The system prompt for a request origin. Exported for tests. */
+export function systemPromptFor(env: Env, origin: string): string {
+  const profile = originProfiles(env)[origin];
+  if (profile) return profile;
+  if (BLOG_ORIGINS.has(origin)) {
+    return env.BLOG_ASSISTANT_SYSTEM_PROMPT?.trim() || BLOG_SYSTEM_PROMPT;
+  }
+  return env.ASSISTANT_SYSTEM_PROMPT?.trim() || DEFAULT_SYSTEM_PROMPT;
+}
+
 const MAX_QUESTION_LEN = 2000;
 const TURNSTILE_VERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -111,9 +155,7 @@ async function handleAsk(request: Request, env: Env): Promise<Response> {
   if (!success) return json({ error: "rate_limited" }, 429, cors);
 
   const origin = request.headers.get("Origin") ?? "";
-  const systemPrompt = BLOG_ORIGINS.has(origin)
-    ? env.BLOG_ASSISTANT_SYSTEM_PROMPT?.trim() || BLOG_SYSTEM_PROMPT
-    : env.ASSISTANT_SYSTEM_PROMPT?.trim() || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = systemPromptFor(env, origin);
   const messages: AiSearchMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: question },
