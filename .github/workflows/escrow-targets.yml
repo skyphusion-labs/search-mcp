@@ -138,19 +138,23 @@ jobs:
           git config user.name "search-mcp escrow"
           git config user.email "noreply@skyphusion.org"
 
-          if git diff --quiet -- swarm-secrets/search-mcp-targets; then
-            echo "escrow_changed=false"
-            echo "::notice::escrow already matches the committed copy; nothing to open"
-            exit 0
-          fi
-          echo "escrow_changed=true"
-
           branch="escrow/search-mcp-targets-${GITHUB_RUN_ID}"
           git checkout -b "$branch"
           # Add the two generated files by name. Never -A: a workspace must not be able
           # to sweep anything else into a secrets repository.
           git add swarm-secrets/search-mcp-targets/targets.json.age
           git add swarm-secrets/search-mcp-targets/escrow-meta.json
+
+          # Stage BEFORE testing for a change. `git diff` ignores untracked files, so on
+          # the very first escrow (when both files are new) it reports no change and this
+          # job would have quietly exited 0 having published nothing, reading green the
+          # whole way. `--cached` compares the staged tree to HEAD and sees new files.
+          if git diff --cached --quiet -- swarm-secrets/search-mcp-targets; then
+            echo "escrow_changed=false"
+            echo "::notice::escrow already matches the committed copy; nothing to open"
+            exit 0
+          fi
+          echo "escrow_changed=true"
 
           msg="$RUNNER_TEMP/commit-msg.txt"
           printf "%s\n\n" "chore(escrow): refresh search-mcp targets.json escrow" > "$msg"
