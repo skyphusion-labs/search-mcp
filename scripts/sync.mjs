@@ -30,14 +30,16 @@ import {
 } from "./corpus-boundary.mjs";
 import {
   isIngestible,
-  isIncludedPath,
   shouldRemapToTxt,
   isNativeIngestPath,
   ingestObjectKey,
   ingestContentType,
   ingestKind,
   fileExt,
-  isExcludedPath,
+  selectRepoPaths,
+  assertIncludePathsConfig,
+  unknownExcludePathsRepos,
+  IncludePathsError,
 } from "./sync-ingest.mjs";
 import {
   resolveTargetsPath,
@@ -131,19 +133,33 @@ function loadConfig() {
   return JSON.parse(readFileSync(TARGETS_PATH, "utf8"));
 }
 
-function planRepo(repo, excludePrefixes = [], includePrefixes = [], skipped = []) {
+function planRepo(repo, excludePrefixes, includePrefixes, skipped = []) {
   const repoDir = join(REPO_ROOT, repo);
+  const hasAllowlist = includePrefixes !== undefined && includePrefixes !== null;
   if (!existsSync(repoDir)) {
+    // A repo with an allowlist has been described exactly: it contributes these
+    // paths and nothing else. A missing clone contributes nothing, which is the
+    // same empty-corpus-with-green-lights failure the allowlist exists to stop.
+    if (hasAllowlist) {
+      throw new IncludePathsError(
+        "include_paths_repo_not_cloned",
+        `includePaths for repo "${repo}" cannot be enforced: not cloned at ${repoDir}. ` +
+          `A repo with an allowlist is expected to contribute exactly those paths, so a ` +
+          `missing clone refuses the sync instead of quietly syncing nothing for it.`,
+      );
+    }
     console.warn(`  ! skip ${repo}: not cloned at ${repoDir}`);
     return [];
   }
+  // Allowlist first, then denylist on top; both refusals happen here, before a
+  // single object is uploaded or pruned.
+  const candidates = selectRepoPaths(repo, trackedFiles(repoDir), {
+    includePrefixes,
+    excludePrefixes,
+  });
   const items = [];
-  for (const rel of trackedFiles(repoDir)) {
+  for (const rel of candidates) {
     if (shouldSkip(rel)) continue;
-    // Allowlist first: when a repo declares includePaths, anything outside them
-    // is not eligible for the corpus at all.
-    if (!isIncludedPath(rel, includePrefixes)) continue;
-    if (isExcludedPath(rel, excludePrefixes)) continue;
     const abs = join(repoDir, rel);
     let size;
     try {
@@ -175,6 +191,15 @@ function planRepo(repo, excludePrefixes = [], includePrefixes = [], skipped = []
       },
     });
   }
+  if (hasAllowlist && items.length === 0) {
+    throw new IncludePathsError(
+      "include_paths_all_filtered",
+      `includePaths for repo "${repo}" selected ${candidates.length} file(s) and none of them ` +
+        `survived the ingest filters (build/vendor directories, lockfiles, .env, binaries, the ` +
+        `size cap, or the text sniff). Nothing would upload for this repo, so the sync refuses ` +
+        `rather than publish an empty corpus.`,
+    );
+  }
   return items;
 }
 
@@ -190,6 +215,17 @@ async function main() {
   if (!target) {
     console.error(`unknown target '${targetName}'. known: ${Object.keys(cfg.targets).join(", ")}`);
     process.exit(2);
+  }
+
+  // Config-level allowlist checks run for every target, not just the one being
+  // synced: a rule that names a repo no target lists is rot, and rot found only
+  // when someone syncs that one target is rot found late.
+  assertIncludePathsConfig(cfg);
+  for (const repo of unknownExcludePathsRepos(cfg)) {
+    console.warn(
+      `  ! excludePaths names repo '${repo}', which no target lists in its repos. ` +
+        "That rule is inert; delete it or add the repo to a target.",
+    );
   }
 
   assertPublicCorpusBoundary(cfg, targetName);
@@ -321,6 +357,12 @@ async function main() {
 }
 
 main().catch((err) => {
+  // A config refusal is an operator error, not a crash: print the diagnostic
+  // without a stack, and exit 2 like the other targets.json failures.
+  if (err instanceof IncludePathsError) {
+    console.error(`\n${err.message}\n  [${err.code}]`);
+    process.exit(2);
+  }
   console.error(err);
   process.exit(1);
 });
