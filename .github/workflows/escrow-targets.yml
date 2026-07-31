@@ -1,0 +1,182 @@
+name: escrow-targets
+
+# Escrow SKYPHUSION_TARGETS_JSON into crew-secrets as age ciphertext, and prove the
+# escrow can be restored (search-mcp#63).
+#
+# GitHub Actions secrets are write-only. The corpus configuration for every live AI
+# Search instance lived in exactly one unreadable place: it could not be recovered, and
+# it could not be edited additively, because adding a target meant writing the whole
+# value blind and a wrong write mirror-prunes live buckets.
+#
+# THIS REPOSITORY IS PUBLIC, so these job logs are world readable, and GitHub log masking
+# matches the literal secret string ONLY. It does not follow the value through a
+# transformation: re-serialize it, base64 it, jq it, diff it, or echo a substring, and
+# the masking silently stops applying. Therefore, in this workflow:
+#   - no set -x, no echo, no cat, no diff anywhere near the value;
+#   - every assertion emits a boolean, a count, or a truncated fingerprint;
+#   - the plaintext exists only inside the escrow script, in a 0700 temp dir it removes.
+#
+# Schedule: deliberately NOT added yet. The drift check becomes a scheduled job in the
+# follow-up that lands once an escrow exists to drift FROM. A weekly red job asserting
+# against a copy that does not exist yet is noise, not signal.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Open a crew-secrets PR with the escrow (off = prove only)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: escrow-targets
+  cancel-in-progress: false
+
+jobs:
+  escrow:
+    if: github.repository == 'skyphusion-labs/search-mcp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - run: npm ci
+
+      # Assert the tool is actually here. A missing age would otherwise surface as a
+      # confusing downstream failure rather than as its one-line cause.
+      - name: Install age
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          age --version
+          age-keygen --version
+
+      # Presence only. Never any :- form: on the secret that is exactly the case being
+      # tested, the fallback form prints the value.
+      - name: Check required inputs are present
+        env:
+          SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
+          ESCROW_AGE_RECIPIENTS: ${{ secrets.ESCROW_AGE_RECIPIENTS }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${SKYPHUSION_TARGETS_JSON:+SET}" ]; then
+            echo "::error::SKYPHUSION_TARGETS_JSON is not set on this repository"
+            missing=1
+          fi
+          if [ -z "${ESCROW_AGE_RECIPIENTS:+SET}" ]; then
+            echo "::error::ESCROW_AGE_RECIPIENTS is not set (age public keys, one per line)"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Escrow the config and prove the restore
+        env:
+          SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
+          ESCROW_AGE_RECIPIENTS: ${{ secrets.ESCROW_AGE_RECIPIENTS }}
+          ESCROW_EXPECT_RECIPIENTS: ${{ vars.ESCROW_EXPECT_RECIPIENTS }}
+          ESCROW_EXPECT_SHA256: ${{ vars.ESCROW_EXPECT_SHA256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          # Recipients are age PUBLIC keys, but they stay out of this public repository
+          # for the same reason targets.json does: they are crew topology.
+          printf "%s\n" "$ESCROW_AGE_RECIPIENTS" > "$work/recipients.txt"
+          node scripts/escrow-targets.mjs \
+            --out "$RUNNER_TEMP/escrow" \
+            --recipients "$work/recipients.txt"
+          rm -rf "$work"
+
+      # Everything above needs no credential beyond the secret being escrowed, so the
+      # proof still runs when publishing is off or unavailable.
+      - name: Refuse to publish without a credential
+        if: inputs.publish
+        env:
+          CREW_SECRETS_ESCROW_TOKEN: ${{ secrets.CREW_SECRETS_ESCROW_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CREW_SECRETS_ESCROW_TOKEN:+SET}" ]; then
+            echo "::error::CREW_SECRETS_ESCROW_TOKEN is not set; cannot open the crew-secrets PR."
+            echo "::error::That is a blocked lane, not something to route around. Publishing the"
+            echo "::error::ciphertext as a workflow artifact instead would expose it publicly:"
+            echo "::error::artifacts on a public repository are world downloadable."
+            exit 1
+          fi
+
+      - name: Check out crew-secrets
+        if: inputs.publish
+        uses: actions/checkout@v7
+        with:
+          repository: skyphusion-labs/crew-secrets
+          token: ${{ secrets.CREW_SECRETS_ESCROW_TOKEN }}
+          path: crew-secrets
+          persist-credentials: true
+
+      - name: Open the escrow PR
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.CREW_SECRETS_ESCROW_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          dest="crew-secrets/swarm-secrets/search-mcp-targets"
+          mkdir -p "$dest"
+          cp "$RUNNER_TEMP/escrow/targets.json.age" "$dest/targets.json.age"
+          cp "$RUNNER_TEMP/escrow/escrow-meta.json" "$dest/escrow-meta.json"
+
+          cd crew-secrets
+          git config user.name "search-mcp escrow"
+          git config user.email "noreply@skyphusion.org"
+
+          if git diff --quiet -- swarm-secrets/search-mcp-targets; then
+            echo "escrow_changed=false"
+            echo "::notice::escrow already matches the committed copy; nothing to open"
+            exit 0
+          fi
+          echo "escrow_changed=true"
+
+          branch="escrow/search-mcp-targets-${GITHUB_RUN_ID}"
+          git checkout -b "$branch"
+          # Add the two generated files by name. Never -A: a workspace must not be able
+          # to sweep anything else into a secrets repository.
+          git add swarm-secrets/search-mcp-targets/targets.json.age
+          git add swarm-secrets/search-mcp-targets/escrow-meta.json
+
+          msg="$RUNNER_TEMP/commit-msg.txt"
+          printf "%s\n\n" "chore(escrow): refresh search-mcp targets.json escrow" > "$msg"
+          printf "%s\n" "Automated from the search-mcp escrow-targets workflow. The in-job" >> "$msg"
+          printf "%s\n" "restore proof passed before this artifact was written; the" >> "$msg"
+          printf "%s\n\n" "recipient-side verify-escrow.sh is still required before merge." >> "$msg"
+          printf "%s\n" "Run: $RUN_URL" >> "$msg"
+
+          body="$RUNNER_TEMP/pr-body.md"
+          printf "%s\n\n" "Automated escrow of the search-mcp corpus configuration (search-mcp#63)." > "$body"
+          printf "%s\n" "The in-job proof passed before this artifact was written:" >> "$body"
+          printf "%s\n" "- the escrowed bytes hash to the live secret;" >> "$body"
+          printf "%s\n" "- a one-character-corrupted copy refuses to restore;" >> "$body"
+          printf "%s\n" "- a non-recipient identity refuses to restore;" >> "$body"
+          printf "%s\n\n" "- the artifact carries exactly the intended recipient stanzas." >> "$body"
+          printf "%s\n\n" "**Before merging, run the recipient-side restore with your own key:**" >> "$body"
+          printf "%s\n\n" "    bash scripts/verify-escrow.sh swarm-secrets/search-mcp-targets" >> "$body"
+          printf "%s\n" "That is the step CI structurally cannot perform, because no real" >> "$body"
+          printf "%s\n\n" "recipient private key exists in CI. See the directory README." >> "$body"
+          printf "%s\n" "Run: $RUN_URL" >> "$body"
+
+          git commit -F "$msg"
+          git push origin "$branch"
+          gh pr create \
+            --repo skyphusion-labs/crew-secrets \
+            --base main \
+            --head "$branch" \
+            --title "chore(escrow): search-mcp targets.json escrow" \
+            --body-file "$body"

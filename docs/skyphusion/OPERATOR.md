@@ -190,6 +190,18 @@ custom_domain = true
 
 ## SKYPHUSION_TARGETS_JSON
 
+> **This block is a SNAPSHOT, not the source of truth. Never rebuild the secret from
+> it.** GitHub Actions secrets are write-only, so nothing here can be checked against
+> the live value, and a stale line rebuilt from documentation becomes real the moment
+> it is written: sync mirror-prunes, so a target or repo missing from a reconstruction
+> is deleted out of the live bucket rather than flagged (search-mcp#63).
+>
+> The recoverable copy is the age escrow at `crew-secrets`
+> `swarm-secrets/search-mcp-targets/`, refreshed from the LIVE secret by the
+> `escrow-targets` workflow. Start every edit by decrypting that, and run
+> `node scripts/guard-targets-additive.mjs --old <before> --new <after>` to prove the
+> edit only adds. Keeping this block current is worth doing; trusting it is not.
+
 Internal repos (indexed only in the internal target): `crew-secrets`,
 `fleet-chezmoi`. Everything else in the org that is public (or soon public) is in
 the public target; classification follows GitHub visibility (`crew-bus` is public

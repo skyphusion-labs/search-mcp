@@ -32,8 +32,20 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
+      # The escrow restore-proof tests drive the real age binary. Without it they would
+      # SKIP, and a suite that silently skips in CI is indistinguishable from one that
+      # passes. ESCROW_REQUIRE_AGE makes the skip path a hard failure here, so the skip
+      # stays a local-dev convenience and can never quietly become the CI result.
+      - name: Install age (escrow restore-proof tests)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          age --version
       - run: npm run typecheck
       - run: npm test
+        env:
+          ESCROW_REQUIRE_AGE: "1"
 
   deploy:
     needs: ci
@@ -57,7 +69,7 @@ jobs:
         with:
           node-version: "22"
       # fc#864: tag vX.Y.Z must match package.json version X.Y.Z so /health cannot lie.
-      # Route the tag through env (not script interpolation) — prism publish-npm pattern.
+      # Route the tag through env (not script interpolation) -- prism publish-npm pattern.
       - name: Verify tag matches package.json version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
