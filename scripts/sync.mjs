@@ -39,6 +39,7 @@ import {
   selectRepoPaths,
   assertIncludePathsConfig,
   unknownExcludePathsRepos,
+  pathMapsForTarget,
   IncludePathsError,
 } from "./sync-ingest.mjs";
 import {
@@ -246,13 +247,16 @@ async function main() {
   console.log(`Target '${targetName}' -> bucket ${target.bucket} (instance ${target.instance})`);
   console.log(`Repo root: ${REPO_ROOT}${DRY ? "  [DRY RUN]" : ""}`);
 
+  // #62: per-target path maps win over top-level for this target.
+  const pathMaps = pathMapsForTarget(cfg, targetName);
+
   const plan = [];
   const skipped = [];
   for (const repo of target.repos) {
     const items = planRepo(
       repo,
-      cfg.excludePaths?.[repo],
-      cfg.includePaths?.[repo],
+      pathMaps.excludePaths?.[repo],
+      pathMaps.includePaths?.[repo],
       skipped,
     );
     if (items.length) console.log(`  + ${repo}: ${items.length} files`);

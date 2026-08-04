@@ -207,6 +207,75 @@ export function knownTargetRepos(cfg) {
   return repos;
 }
 
+/**
+ * Resolve include/exclude path maps for ONE target (search-mcp#62).
+ *
+ * Precedence: per-target maps win per-repo over top-level maps. Top-level alone
+ * keeps the pre-#62 shape (the same rule for every target that lists the repo).
+ * A repo listed only under another target's nested map is not visible here.
+ *
+ * Why both layers: the original top-level key was fine while every exclusion
+ * applied to exactly one target; the moment a repo is deliberately indexed at
+ * two granularities (public vs internal), a single map cannot express it.
+ */
+export function pathMapsForTarget(cfg, targetName) {
+  const target = cfg?.targets?.[targetName] || {};
+  const topInclude =
+    cfg?.includePaths && typeof cfg.includePaths === "object" && !Array.isArray(cfg.includePaths)
+      ? cfg.includePaths
+      : {};
+  const topExclude =
+    cfg?.excludePaths && typeof cfg.excludePaths === "object" && !Array.isArray(cfg.excludePaths)
+      ? cfg.excludePaths
+      : {};
+  const tInclude =
+    target.includePaths && typeof target.includePaths === "object" && !Array.isArray(target.includePaths)
+      ? target.includePaths
+      : {};
+  const tExclude =
+    target.excludePaths && typeof target.excludePaths === "object" && !Array.isArray(target.excludePaths)
+      ? target.excludePaths
+      : {};
+  return {
+    includePaths: { ...topInclude, ...tInclude },
+    excludePaths: { ...topExclude, ...tExclude },
+  };
+}
+
+function isPathMapObject(v) {
+  return v !== undefined && v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/** Validate one path-map object against a known-repo set. Returns error objects. */
+function validateIncludePathsMap(includePaths, known, label) {
+  const errors = [];
+  if (includePaths === undefined || includePaths === null) return errors;
+  if (!isPathMapObject(includePaths)) {
+    errors.push({
+      code: "include_paths_not_object",
+      message:
+        `${label} must be an object keyed by repo, got ${describeType(includePaths)}. ` +
+        `Shape: "includePaths": { "my-repo": ["_corpus/"] }.`,
+    });
+    return errors;
+  }
+  for (const [repo, prefixes] of Object.entries(includePaths)) {
+    if (repo.startsWith("_")) continue; // documentation keys in the example file
+    if (!known.has(repo)) {
+      errors.push({
+        code: "include_paths_unknown_repo",
+        message:
+          `${label} names repo ${q(repo)}, which is not in the applicable target repo list. ` +
+          `Nothing reads that rule, and a rule nothing reads is indistinguishable from a rule ` +
+          `that works. Add the repo to the target or delete the entry. Applicable repos: ` +
+          `${[...known].join(", ") || "(none)"}.`,
+      });
+    }
+    errors.push(...validateIncludePathsEntry(repo, prefixes));
+  }
+  return errors;
+}
+
 /** Shape check for one repo entry. Returns {code, message} objects, never throws. */
 export function validateIncludePathsEntry(repo, prefixes) {
   const errors = [];
@@ -263,38 +332,24 @@ export function validateIncludePathsEntry(repo, prefixes) {
 }
 
 /**
- * Whole-config check for targets.json `includePaths`. Returns {code, message}
- * objects, never throws, so a caller can report all of them at once.
+ * Whole-config check for targets.json `includePaths` (top-level AND per-target,
+ * search-mcp#62). Returns {code, message} objects, never throws, so a caller can
+ * report all of them at once.
  *
- * Rejects an entry naming a repo no target lists: a rule nothing reads is
- * indistinguishable from a rule that works, which is how an allowlist rots.
+ * Rejects an entry naming a repo no applicable target lists: a rule nothing
+ * reads is indistinguishable from a rule that works, which is how an allowlist
+ * rots. Per-target maps are checked against that target's repos only.
  */
 export function validateIncludePathsConfig(cfg) {
   const errors = [];
-  const includePaths = cfg?.includePaths;
-  if (includePaths === undefined || includePaths === null) return errors;
-  if (typeof includePaths !== "object" || Array.isArray(includePaths)) {
-    errors.push({
-      code: "include_paths_not_object",
-      message:
-        `targets.json includePaths must be an object keyed by repo, got ` +
-        `${describeType(includePaths)}. Shape: "includePaths": { "my-repo": ["_corpus/"] }.`,
-    });
-    return errors;
-  }
-  const known = knownTargetRepos(cfg);
-  for (const [repo, prefixes] of Object.entries(includePaths)) {
-    if (!known.has(repo)) {
-      errors.push({
-        code: "include_paths_unknown_repo",
-        message:
-          `includePaths names repo ${q(repo)}, which no target lists in its repos. Nothing reads ` +
-          `that rule, and a rule nothing reads is indistinguishable from a rule that works. Add ` +
-          `the repo to a target or delete the entry. Repos across all targets: ` +
-          `${[...known].join(", ") || "(none)"}.`,
-      });
-    }
-    errors.push(...validateIncludePathsEntry(repo, prefixes));
+  const knownAll = knownTargetRepos(cfg);
+  errors.push(...validateIncludePathsMap(cfg?.includePaths, knownAll, "targets.json includePaths"));
+  for (const [name, target] of Object.entries(cfg?.targets || {})) {
+    if (!target || typeof target !== "object") continue;
+    const known = new Set(Array.isArray(target.repos) ? target.repos : []);
+    errors.push(
+      ...validateIncludePathsMap(target.includePaths, known, `targets.${name}.includePaths`),
+    );
   }
   return errors;
 }
@@ -307,15 +362,30 @@ export function assertIncludePathsConfig(cfg) {
 }
 
 /**
- * excludePaths keys naming a repo no target lists. Denylist rot is quieter than
- * allowlist rot (the corpus grows rather than empties), so this is a warning at
- * the call site, not a refusal.
+ * excludePaths keys (top-level OR nested under a target) naming a repo no
+ * applicable target lists. Denylist rot is quieter than allowlist rot (the
+ * corpus grows rather than empties), so this is a warning at the call site,
+ * not a refusal. Returns unique repo names.
  */
 export function unknownExcludePathsRepos(cfg) {
-  const excludePaths = cfg?.excludePaths;
-  if (!excludePaths || typeof excludePaths !== "object" || Array.isArray(excludePaths)) return [];
-  const known = knownTargetRepos(cfg);
-  return Object.keys(excludePaths).filter((repo) => !known.has(repo));
+  const out = new Set();
+  const knownAll = knownTargetRepos(cfg);
+  const top = cfg?.excludePaths;
+  if (isPathMapObject(top)) {
+    for (const repo of Object.keys(top)) {
+      if (!repo.startsWith("_") && !knownAll.has(repo)) out.add(repo);
+    }
+  }
+  for (const target of Object.values(cfg?.targets || {})) {
+    if (!target || typeof target !== "object") continue;
+    const nested = target.excludePaths;
+    if (!isPathMapObject(nested)) continue;
+    const known = new Set(Array.isArray(target.repos) ? target.repos : []);
+    for (const repo of Object.keys(nested)) {
+      if (!repo.startsWith("_") && !known.has(repo)) out.add(repo);
+    }
+  }
+  return [...out];
 }
 
 /**

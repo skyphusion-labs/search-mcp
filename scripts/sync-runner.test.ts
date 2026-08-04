@@ -69,7 +69,7 @@ describe("run", () => {
   it("clone failure aborts before sync", async () => {
     const runSync = vi.fn();
     const res = await run(plan, {
-      cloneTree: (repo) => {
+      cloneTree: (repo: string) => {
         if (repo === "b") {
           const e: any = new Error("git failed");
           e.status = 128;

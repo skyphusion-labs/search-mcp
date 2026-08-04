@@ -46,12 +46,12 @@ describe("diffAdditive", () => {
   // The actual change this guard was built for.
   it("accepts adding a third target plus its allowlist", () => {
     const next = clone(BASE);
-    next.targets.rockenhaus = {
+    (next.targets as Record<string, unknown>).rockenhaus = {
       instance: "rockenhaus-public",
       bucket: "rockenhaus-search-public",
       repos: ["rockenhaus-litigation-public"],
     };
-    next.includePaths["rockenhaus-litigation-public"] = ["_corpus/"];
+    (next.includePaths as Record<string, string[]>)["rockenhaus-litigation-public"] = ["_corpus/"];
     const report = diffAdditive(BASE, next);
     expect(report.additive).toBe(true);
     expect(report.targetsPreserved).toBe(2);
@@ -171,7 +171,7 @@ describe("guard main", () => {
 
   it("exits 0 on an additive edit", () => {
     const next = clone(BASE);
-    next.targets.third = { instance: "i3", bucket: "b3", repos: [] };
+    (next.targets as Record<string, unknown>).third = { instance: "i3", bucket: "b3", repos: [] };
     const code = main(["--old", write("old.json", BASE), "--new", write("new.json", next)]);
     expect(code).toBe(EXIT_OK);
     expect(logged).toContain("prior_targets_preserved=2/2");

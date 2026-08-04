@@ -1,0 +1,29 @@
+name = "rockenhaus-search"
+main = "src/index.ts"
+compatibility_date = "2026-03-27"
+compatibility_flags = ["nodejs_compat"]
+account_id = "fabcb25d9c7eb087110ec474a03e50d2"
+
+[observability]
+enabled = true
+
+[[ai_search]]
+binding = "SEARCH"
+instance_name = "rockenhaus-public"
+
+[[ratelimits]]
+name = "ASK_LIMITER"
+namespace_id = "2"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[vars]
+ALLOWED_ORIGINS = "https://rockenhaus.net,https://www.rockenhaus.net,https://litigation.rockenhaus.net"
+GENERATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+ASSISTANT_SYSTEM_PROMPT = "You are the court-record assistant for rockenhaus.net, the public archive of filed Michigan court documents in Rockenhaus v. Rockenhaus (Wayne 26-104594-DO and related matters). Answer ONLY from the retrieved filing text. Prefer short, plain answers. Cite sources by the document and page the retrieval returns. Do not invent facts, hearings, or orders that are not in the retrieved text. Filed pleadings are allegations, not adjudicated findings, unless the text is an order. If the corpus does not support an answer, say so. This is not legal advice."
+
+[[routes]]
+pattern = "search.rockenhaus.net"
+custom_domain = true
