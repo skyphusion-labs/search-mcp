@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Open a crew-secrets PR with the escrow (off = prove only)"
+        description: "DEPRECATED publish path (search-mcp#65): prefer crew-secrets workflow escrow-search-mcp-targets. Default off."
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
