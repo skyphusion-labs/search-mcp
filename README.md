@@ -263,8 +263,9 @@ Operators building documentation search, agent tooling, or internal knowledge ba
 ## Links
 
 - **Deploy guide:** [docs/DEPLOY.md](docs/DEPLOY.md)
-- **Skyphusion Labs:** https://skyphusion.org · **Org:** https://github.com/skyphusion-labs
-- **Related:** [vivijure](https://github.com/skyphusion-labs/vivijure), [postern](https://github.com/skyphusion-labs/postern)
+- **Live ask UIs:** [skyphusion.net/search](https://skyphusion.net/search/) · [vivijure.com](https://vivijure.com) (ask widget)
+- **Skyphusion Labs:** https://skyphusion.org · **Blog:** https://skyphusion.net · **Org:** https://github.com/skyphusion-labs
+- **Related:** [vivijure](https://github.com/skyphusion-labs/vivijure), [postern](https://github.com/skyphusion-labs/postern), [security-audit](https://github.com/skyphusion-labs/security-audit), [prism](https://github.com/skyphusion-labs/prism)
 
 ## License
 
