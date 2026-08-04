@@ -172,10 +172,23 @@ export const REINDEX_POLL_MS = 15 * 1000;
  * AI Search refuses a new job for a cooldown window after the previous one ENDS, distinct from
  * the job being in flight. Measured 2026-07-16: rejected 10s after a job ended, accepted at
  * 32s. Waiting for `ended_at` alone is necessary but not sufficient.
+ *
+ * Also treated as transient (2026-08-04 live corpus-sync): `unable_to_connect_to_ai_search
+ * [code: 7017]` on jobs create for skyphusion-public -- the instance was healthy (list jobs
+ * worked; a later create succeeded). Retrying under the same budget as cooldown is correct;
+ * treating 7017 as terminal made the whole sync red while R2 already had the new objects.
  */
-export function isCooldownError(err) {
+export function isTransientReindexError(err) {
   const text = `${err?.stdout || ""}${err?.stderr || ""}${err?.message || ""}`;
-  return /sync_in_cooldown|code:\s*7020/.test(text);
+  return (
+    /sync_in_cooldown|code:\s*7020/.test(text) ||
+    /unable_to_connect_to_ai_search|code:\s*7017/.test(text)
+  );
+}
+
+/** @deprecated prefer isTransientReindexError; kept so older call sites and tests keep working. */
+export function isCooldownError(err) {
+  return isTransientReindexError(err);
 }
 
 /**
@@ -218,13 +231,14 @@ export async function awaitReindexSlot(instance, deps) {
 }
 
 /**
- * Dispatch a reindex, retrying while AI Search reports its post-job cooldown.
+ * Dispatch a reindex, retrying while AI Search reports a TRANSIENT refuse
+ * (post-job cooldown 7020, or unable_to_connect_to_ai_search 7017).
  *
- * Cooldown is transient and short (measured well under the budget), so the routine burst case
- * clears here and never goes red. Exhausting the budget therefore means something genuinely
- * anomalous upstream, and we fail loud rather than exit green: a green run while indexing is
- * actually stalled is the work-blind failure mode this whole issue exists to remove. The
- * message carries the honest blast radius so the red is actionable, not alarming.
+ * These clears are short relative to the budget, so the routine burst case clears here and
+ * never goes red. Exhausting the budget means something genuinely anomalous upstream, and we
+ * fail loud rather than exit green: a green run while indexing is actually stalled is the
+ * work-blind failure mode this whole issue exists to remove. The message carries the honest
+ * blast radius so the red is actionable, not alarming.
  */
 export async function dispatchWithCooldownRetry(instance, deps) {
   const {
@@ -242,17 +256,21 @@ export async function dispatchWithCooldownRetry(instance, deps) {
       runReindexOnce(instance);
       return { retried: announced };
     } catch (err) {
-      if (!isCooldownError(err)) throw err;
+      if (!isTransientReindexError(err)) throw err;
       if (now() >= deadline) {
         throw new Error(
-          `reindex for ${instance} blocked by AI Search cooldown for longer than ` +
-            `${Math.round(timeoutMs / 1000)}s. The R2 corpus uploaded OK and no data is lost; ` +
-            "the index lags until the next sync or the daily backstop. A cooldown this " +
-            "persistent is upstream and anomalous, so this run fails loudly on purpose.",
+          `reindex for ${instance} blocked by transient AI Search errors for longer than ` +
+            `${Math.round(timeoutMs / 1000)}s (cooldown 7020 and/or connect 7017). ` +
+            "The R2 corpus uploaded OK and no data is lost; the index lags until the next " +
+            "sync or the daily backstop. Persistence this long is upstream and anomalous, " +
+            "so this run fails loudly on purpose.",
         );
       }
       if (!announced) {
-        log(`  ${instance} is in AI Search cooldown; retrying until it clears.`);
+        log(
+          `  ${instance} hit a transient AI Search refuse (cooldown or unable_to_connect); ` +
+            "retrying until it clears.",
+        );
         announced = true;
       }
       await sleep(pollMs);
