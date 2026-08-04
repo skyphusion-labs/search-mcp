@@ -10,6 +10,7 @@ import {
   awaitReindexSlot,
   dispatchWithCooldownRetry,
   isCooldownError,
+  isTransientReindexError,
   productionReindexDeps,
   REINDEX_INFLIGHT_TIMEOUT_MS,
   REINDEX_COOLDOWN_TIMEOUT_MS,
@@ -231,26 +232,40 @@ describe("production wiring", () => {
   });
 });
 
-describe("isCooldownError", () => {
+describe("isTransientReindexError / isCooldownError", () => {
   // Shape taken verbatim from a real failed run (2026-07-16 21:19:21Z).
-  const real = Object.assign(new Error("Command failed"), {
+  const cooldown = Object.assign(new Error("Command failed"), {
     stderr:
       "✘ [ERROR] A request to the Cloudflare API (/accounts/x/ai-search/namespaces/default/" +
       "instances/skyphusion-internal/jobs) failed.\n\n  sync_in_cooldown [code: 7020]\n",
   });
-
-  it("recognizes the real wrangler cooldown failure", () => {
-    expect(isCooldownError(real)).toBe(true);
+  // Shape from 2026-08-04 corpus-sync: public jobs create failed; list jobs still worked.
+  const connect = Object.assign(new Error("Command failed"), {
+    stderr:
+      "✘ [ERROR] A request to the Cloudflare API (/accounts/x/ai-search/namespaces/default/" +
+      "instances/skyphusion-public/jobs) failed.\n\n  unable_to_connect_to_ai_search [code: 7017]\n",
   });
 
-  it("matches on the bare code too", () => {
+  it("recognizes the real wrangler cooldown failure", () => {
+    expect(isCooldownError(cooldown)).toBe(true);
+    expect(isTransientReindexError(cooldown)).toBe(true);
+  });
+
+  it("recognizes unable_to_connect_to_ai_search (7017) as transient", () => {
+    expect(isTransientReindexError(connect)).toBe(true);
+    expect(isCooldownError(connect)).toBe(true);
+  });
+
+  it("matches on the bare codes too", () => {
     expect(isCooldownError({ message: "code: 7020" })).toBe(true);
+    expect(isTransientReindexError({ message: "code: 7017" })).toBe(true);
   });
 
   it("does not swallow unrelated failures", () => {
     expect(isCooldownError(new Error("ENOTFOUND api.cloudflare.com"))).toBe(false);
     expect(isCooldownError({ stderr: "authentication error [code: 10000]" })).toBe(false);
     expect(isCooldownError(undefined)).toBe(false);
+    expect(isTransientReindexError({ stderr: "authentication error [code: 10000]" })).toBe(false);
   });
 });
 
@@ -313,6 +328,24 @@ describe("dispatchWithCooldownRetry (#12)", () => {
         log: quiet,
       }),
     ).rejects.toThrow(/no data is lost[\s\S]*next sync or the daily backstop/);
+  });
+
+  it("retries unable_to_connect_to_ai_search (7017) the same way as cooldown", async () => {
+    let n = 0;
+    const connect = () =>
+      Object.assign(new Error("Command failed"), {
+        stderr: "unable_to_connect_to_ai_search [code: 7017]",
+      });
+    const runReindexOnce = vi.fn(() => {
+      if (++n <= 2) throw connect();
+    });
+    const r = await dispatchWithCooldownRetry("skyphusion-public", {
+      runReindexOnce,
+      sleep: async () => {},
+      log: quiet,
+    });
+    expect(runReindexOnce).toHaveBeenCalledTimes(3);
+    expect(r.retried).toBe(true);
   });
 });
 
