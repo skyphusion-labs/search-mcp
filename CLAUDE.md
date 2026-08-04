@@ -41,7 +41,8 @@ git push origin vX.Y.Z
 
 Merge alone never ships.
 
-## Crew identity
+## Crew + identity
 
-Conrad laptop: commits as `Conrad Rockenhaus <conrad@skyphusion.org>`. Branch + PR; never push to
-`main` unless Conrad says so.
+Crew members work as their own Unix + gh identity (`sudo -u <member> bash -lc '...'`). Crew commits
+use `skyphusion-<member>` identity, never Conrad's. Conrad devs only on his laptop
+(`Conrad Rockenhaus <conrad@skyphusion.org>`).
