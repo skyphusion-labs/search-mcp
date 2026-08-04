@@ -52,7 +52,7 @@
     "dev:mcp": "wrangler dev -c wrangler.mcp.toml",
     "deploy": "wrangler deploy",
     "deploy:mcp": "wrangler deploy -c wrangler.mcp.toml",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
     "prepack": "npm run typecheck && npm test",
     "sync": "node scripts/sync.mjs corpus",
@@ -62,13 +62,16 @@
     "sync:run": "node scripts/sync-runner.mjs",
     "materialize-config": "node scripts/materialize-config.mjs",
     "escrow": "node scripts/escrow-targets.mjs",
-    "guard:targets": "node scripts/guard-targets-additive.mjs"
+    "guard:targets": "node scripts/guard-targets-additive.mjs",
+    "deploy:rockenhaus": "wrangler deploy -c wrangler.rockenhaus.toml",
+    "sync:rockenhaus": "node scripts/sync.mjs rockenhaus"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260713.1",
+    "@types/node": "^22.15.0",
     "@vitest/coverage-istanbul": "^4.1.10",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",

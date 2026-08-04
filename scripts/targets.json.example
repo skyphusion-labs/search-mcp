@@ -1,11 +1,11 @@
 {
   "_comment": "Copy to targets.json (./targets.json for npm CLI, or scripts/targets.json in a git clone). repos are directory names under SYNC_REPO_ROOT (default: cwd for npm, parent of this repo for dev clone). Only git-tracked files are uploaded.",
-  "_includePaths_comment": "ALLOWLIST, optional, per repo. When present, ONLY paths under these prefixes are eligible for the corpus and everything else is refused. Use it when the corpus boundary matters: a denylist is fail-OPEN, so a new top-level file silently joins the corpus, whereas an allowlist is fail-CLOSED. Omit a repo to keep the old behaviour of admitting everything; an entry that is present but EMPTY is an error, not a way to index nothing.",
-  "_includePaths_refusals": "A present allowlist must earn its keep: an entry matching zero git-tracked files, an entry naming a repo no target lists, a repo whose clone is missing, or a selection that excludePaths or the ingest filters empty out all refuse the sync (exit 2). An allowlist that quietly matches nothing would prune a healthy corpus and reindex over the emptiness with every status light green.",
+  "_includePaths_comment": "ALLOWLIST, optional, per repo. When present, ONLY paths under these prefixes are eligible for the corpus and everything else is refused. Use it when the corpus boundary matters: a denylist is fail-OPEN, so a new top-level file silently joins the corpus, whereas an allowlist is fail-CLOSED. Omit a repo to keep the old behaviour of admitting everything; an entry that is present but EMPTY is an error, not a way to index nothing. May live at the top level (applies to every target that lists the repo) OR nested under a target (search-mcp#62); per-target wins per repo when both set the same key.",
+  "_includePaths_refusals": "A present allowlist must earn its keep: an entry matching zero git-tracked files, an entry naming a repo no applicable target lists, a repo whose clone is missing, or a selection that excludePaths or the ingest filters empty out all refuse the sync (exit 2). An allowlist that quietly matches nothing would prune a healthy corpus and reindex over the emptiness with every status light green.",
   "includePaths": {
     "example-repo": ["docs/"]
   },
-  "_excludePaths_comment": "DENYLIST, optional, per repo. Applied after includePaths.",
+  "_excludePaths_comment": "DENYLIST, optional, per repo. Applied after includePaths. Same top-level vs per-target nesting as includePaths.",
   "excludePaths": {
     "example-repo": ["vendor/private-notes/"]
   },
@@ -15,6 +15,15 @@
       "instance": "my-ai-search-instance",
       "bucket": "my-search-corpus",
       "repos": ["example-repo"]
+    },
+    "_per_target_paths_example": {
+      "_comment": "Optional nested includePaths/excludePaths apply only to this target (search-mcp#62). Use when the same repo is indexed at different granularities across targets.",
+      "instance": "other-instance",
+      "bucket": "other-bucket",
+      "repos": ["example-repo"],
+      "includePaths": {
+        "example-repo": ["_corpus/"]
+      }
     }
   }
 }

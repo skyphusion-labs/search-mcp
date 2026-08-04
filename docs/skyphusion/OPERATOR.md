@@ -15,7 +15,11 @@ materialized at deploy/sync time by `scripts/materialize-config.mjs`. Never comm
 | `skyphusion-public` | `skyphusion-search` | `search.vivijure.com` | Public GitHub repos only |
 | `skyphusion-internal` | `skyphusion-search-internal-mcp` | `search-internal.vivijure.com` | Public + internal repos (bearer-gated MCP) |
 
-`rockenhaus-litigation` is excluded; it will get its own search-mcp deployment later.
+`rockenhaus-litigation` (private) is never a sync source. The public mirror
+`rockenhaus-litigation-public` feeds the separate **rockenhaus** target
+(`rockenhaus-public` AI Search / `rockenhaus-search-public` R2 /
+`search.rockenhaus.net`), fail-closed to `_corpus/` via per-target `includePaths`
+(search-mcp#58).
 
 ## GitHub secrets (search-mcp repo)
 
@@ -190,111 +194,64 @@ custom_domain = true
 
 ## SKYPHUSION_TARGETS_JSON
 
-> **This block is a SNAPSHOT, not the source of truth. Never rebuild the secret from
-> it.** GitHub Actions secrets are write-only, so nothing here can be checked against
-> the live value, and a stale line rebuilt from documentation becomes real the moment
-> it is written: sync mirror-prunes, so a target or repo missing from a reconstruction
-> is deleted out of the live bucket rather than flagged (search-mcp#63).
->
-> The recoverable copy is the age escrow at `crew-secrets`
-> `swarm-secrets/search-mcp-targets/`, refreshed from the LIVE secret by the
-> `escrow-targets` workflow. Start every edit by decrypting that, and run
-> `node scripts/guard-targets-additive.mjs --old <before> --new <after>` to prove the
-> edit only adds. Keeping this block current is worth doing; trusting it is not.
+**Disposition (search-mcp#66):** production topology stays a **write-only Actions
+secret** (plus the age escrow). This public doc publishes **shape only**, never the
+full repo lists, instance names beyond the three live product names, or path
+exclusions. A prior full JSON snapshot here was theatre-plus-leak: it defeated the
+secret's privacy rationale while still being unsafe to rebuild from (mirror-prune).
 
-Internal repos (indexed only in the internal target): `crew-secrets`,
-`fleet-chezmoi`. Everything else in the org that is public (or soon public) is in
-the public target; classification follows GitHub visibility (`crew-bus` is public
-on GitHub and was reclassified into the public target 2026-07-18). `rockenhaus-litigation`, `skyphusion-search`, `infra`, and `swarm-iac`
-are excluded, as are archived repos (`ops` dropped 2026-07-18 when it was archived; the
-mirror-prune sync removes a dropped repo's corpus automatically).
+### Shape (not a rebuild source)
 
 ```json
 {
-  "excludePaths": {
-    "fleet-chezmoi": [
-      "claude-memory/projects/-home-conrad/",
-      "claude-memory/CLAUDE.md"
-    ]
-  },
-  "restrictedRepos": [
-    "crew-secrets",
-    "fleet-chezmoi"
-  ],
+  "excludePaths": { "<repo>": ["<prefix>/", "..."] },
+  "includePaths": { "<repo>": ["<prefix>/", "..."] },
+  "restrictedRepos": ["<internal-only-repo>", "..."],
   "targets": {
-    "public": {
-      "instance": "skyphusion-public",
-      "bucket": "skyphusion-search-public",
-      "repos": [
-        ".github",
-        "common-thread",
-        "crew-bus",
-        "hollow-grid-c",
-        "hollow-grid-go",
-        "hollow-grid-py",
-        "mud-bots",
-        "postern",
-        "prism",
-        "search-mcp",
-        "SidVicious_exe",
-        "skyphusion-monitor",
-        "skyphusion-net",
-        "skyphusion-org",
-        "slate",
-        "the-hollow-grid",
-        "vivijure",
-        "vivijure-audio-upscale",
-        "vivijure-backend",
-        "vivijure-cf",
-        "vivijure-com",
-        "vivijure-core",
-        "vivijure-local",
-        "vivijure-local-12gb",
-        "vivijure-local-16gb",
-        "vivijure-mcp",
-        "vivijure-musetalk",
-        "vivijure-upscale"
-      ]
-    },
-    "internal": {
-      "instance": "skyphusion-internal",
-      "bucket": "skyphusion-search-internal",
-      "repos": [
-        ".github",
-        "common-thread",
-        "crew-bus",
-        "crew-secrets",
-        "fleet-chezmoi",
-        "hollow-grid-c",
-        "hollow-grid-go",
-        "hollow-grid-py",
-        "mud-bots",
-        "postern",
-        "prism",
-        "search-mcp",
-        "SidVicious_exe",
-        "skyphusion-monitor",
-        "skyphusion-net",
-        "skyphusion-org",
-        "slate",
-        "the-hollow-grid",
-        "vivijure",
-        "vivijure-audio-upscale",
-        "vivijure-backend",
-        "vivijure-cf",
-        "vivijure-com",
-        "vivijure-core",
-        "vivijure-local",
-        "vivijure-local-12gb",
-        "vivijure-local-16gb",
-        "vivijure-mcp",
-        "vivijure-musetalk",
-        "vivijure-upscale"
-      ]
+    "<name>": {
+      "instance": "<ai-search-instance>",
+      "bucket": "<r2-bucket>",
+      "repos": ["<repo>", "..."],
+      "includePaths": { "<repo>": ["<prefix>/"] },
+      "excludePaths": { "<repo>": ["<prefix>/"] }
     }
   }
 }
 ```
+
+- **Top-level** `includePaths` / `excludePaths`: apply to every target that lists
+  the repo (legacy shape).
+- **Per-target** nested maps (search-mcp#62): win per-repo over top-level when
+  the same repo is indexed at different granularities across targets.
+- **Classification:** follows GitHub visibility. Restricted internal-only repos
+  land only in the internal target. Archived / private litigation sources are
+  never mixed into skyphusion public/internal.
+- **Live product targets:** `public` (`search.vivijure.com`), `internal`
+  (`search-internal.vivijure.com`), `rockenhaus` (`search.rockenhaus.net`).
+
+### Source of truth / how to edit
+
+1. Decrypt the age escrow (crew-secrets `swarm-secrets/search-mcp-targets/`),
+   never reconstruct from this doc.
+2. Edit a copy; prove the edit is additive:
+   `node scripts/guard-targets-additive.mjs --old <before> --new <after>`
+3. `gh secret set SKYPHUSION_TARGETS_JSON -R skyphusion-labs/search-mcp < after.json`
+   (stdin only).
+4. Re-run `escrow-targets` and verify at the artifact (`verify-escrow.sh`).
+5. Then let `corpus-sync` run.
+
+## hybrid_search (search-mcp#59)
+
+As of 2026-07-31 (open beta), **`hybrid_search` cannot be set** on any AI Search
+instance in this account: create/update accept the flag, report success, and
+`hybrid_search` still reads `null` on all three instances
+(`skyphusion-public`, `skyphusion-internal`, `rockenhaus-public`). Pure vector
+retrieval only. Docket numbers and exact party names on the litigation corpus
+are the sharpest gap; do not tune the prompt to paper over it, and do not re-run
+`wrangler ai-search update --hybrid-search` expecting a change until CF ships a
+real persistence path. Re-check when AI Search leaves open beta; the
+success-for-no-op CLI behaviour is a wrangler/API bug independent of whether the
+field ever becomes settable.
 
 ## R2 corpus token (mint / roll)
 

@@ -82,16 +82,38 @@ export function diffAdditive(oldCfg, newCfg) {
   }
 
   const boundary = { includePaths: 0, excludePaths: 0, prefixes: 0 };
+
+  // Flatten top-level + per-target path maps into one comparable surface so a
+  // dropped nested allowlist/denylist is the same class of silent boundary
+  // widening as dropping a top-level entry (search-mcp#62).
+  function flattenPathMaps(cfg, key) {
+    const out = {};
+    const top = prefixMap(cfg, key);
+    for (const [repo, prefixes] of Object.entries(top)) {
+      if (repo.startsWith("_")) continue;
+      out[`/:${repo}`] = prefixes;
+    }
+    for (const [tName, target] of Object.entries(asObject(cfg.targets || {}, "targets"))) {
+      if (!target || typeof target !== "object") continue;
+      const nested = target[key];
+      if (!nested || typeof nested !== "object" || Array.isArray(nested)) continue;
+      for (const [repo, prefixes] of Object.entries(nested)) {
+        if (repo.startsWith("_")) continue;
+        out[`${tName}:${repo}`] = prefixes;
+      }
+    }
+    return out;
+  }
+
   for (const key of ["includePaths", "excludePaths"]) {
-    const before = prefixMap(oldCfg, key);
-    const after = prefixMap(newCfg, key);
-    for (const repo of Object.keys(before)) {
-      if (repo.startsWith("_")) continue; // documentation keys in the example file
-      if (!(repo in after)) {
+    const before = flattenPathMaps(oldCfg, key);
+    const after = flattenPathMaps(newCfg, key);
+    for (const slot of Object.keys(before)) {
+      if (!(slot in after)) {
         boundary[key] += 1;
         continue;
       }
-      boundary.prefixes += missingFrom(before[repo], after[repo]);
+      boundary.prefixes += missingFrom(before[slot], after[slot]);
     }
   }
 

@@ -48,7 +48,7 @@ cp wrangler.mcp.toml.example wrangler.mcp.toml
 cp scripts/targets.json.example scripts/targets.json
 # edit the three files for your account, instance, bucket, and repos
 
-npm run typecheck
+npm run typecheck   # src + index.test.ts (Workers types) AND scripts/**/*.test.ts (Node types)
 npm test
 ```
 
@@ -114,6 +114,11 @@ The sync remaps non-native extensions (`.ts`, `.tsx`, extensionless `Dockerfile`
 repo and it silently joins the corpus. That is fine for a docs site. It is wrong
 whenever the corpus boundary actually matters, because "we forgot to exclude it"
 becomes a real incident.
+
+`includePaths` / `excludePaths` may sit at the **top level** (same rule for every
+target that lists the repo) or **nested under a target** (search-mcp#62). When
+both set the same repo, the per-target map wins for that target only -- so a
+repo can be full-tree on internal and `_corpus/`-only on a public court surface.
 
 `includePaths` is an allowlist and is **fail-closed**: when a repo has an entry,
 only paths under those prefixes are eligible and everything else is refused.

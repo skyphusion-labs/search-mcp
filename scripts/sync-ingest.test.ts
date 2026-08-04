@@ -10,6 +10,7 @@ import {
   assertIncludePathsConfig,
   unknownExcludePathsRepos,
   knownTargetRepos,
+  pathMapsForTarget,
   IncludePathsError,
 } from "./sync-ingest.mjs";
 
@@ -277,7 +278,7 @@ describe("includePaths config validation", () => {
     const errors = validateIncludePathsConfig(cfg);
     expect(errors.map((e: { code: string }) => e.code)).toContain("include_paths_unknown_repo");
     expect(errors[0].message).toContain("rockenhaus-litigation-pubic");
-    expect(errors[0].message).toContain("no target lists");
+    expect(errors[0].message).toContain("not in the applicable target repo list");
     expectRefusal(
       () => assertIncludePathsConfig(cfg),
       "include_paths_unknown_repo",
@@ -335,5 +336,88 @@ describe("unknownExcludePathsRepos", () => {
 
   it("names an excludePaths repo no target lists", () => {
     expect(unknownExcludePathsRepos({ ...CFG, excludePaths: { ops: ["docs/"] } })).toEqual(["ops"]);
+  });
+
+  it("names a nested excludePaths repo missing from that target (search-mcp#62)", () => {
+    const cfg = {
+      targets: {
+        public: {
+          instance: "i",
+          bucket: "b",
+          repos: ["a"],
+          excludePaths: { "ghost-repo": ["x/"] },
+        },
+      },
+    };
+    expect(unknownExcludePathsRepos(cfg)).toEqual(["ghost-repo"]);
+  });
+});
+
+describe("pathMapsForTarget (search-mcp#62)", () => {
+  const cfg = {
+    includePaths: { shared: ["docs/"], "only-top": ["top/"] },
+    excludePaths: { shared: ["vendor/"] },
+    targets: {
+      public: {
+        instance: "pub",
+        bucket: "bp",
+        repos: ["shared", "only-top", "public-only"],
+        includePaths: { shared: ["_corpus/"], "public-only": ["src/"] },
+        excludePaths: { shared: ["secret/"] },
+      },
+      internal: {
+        instance: "int",
+        bucket: "bi",
+        repos: ["shared", "only-top"],
+      },
+    },
+  };
+
+  it("merges top-level with per-target, target winning per repo", () => {
+    const maps = pathMapsForTarget(cfg, "public");
+    expect(maps.includePaths.shared).toEqual(["_corpus/"]);
+    expect(maps.includePaths["only-top"]).toEqual(["top/"]);
+    expect(maps.includePaths["public-only"]).toEqual(["src/"]);
+    expect(maps.excludePaths.shared).toEqual(["secret/"]);
+  });
+
+  it("falls back to top-level alone when the target has no nested maps", () => {
+    const maps = pathMapsForTarget(cfg, "internal");
+    expect(maps.includePaths.shared).toEqual(["docs/"]);
+    expect(maps.excludePaths.shared).toEqual(["vendor/"]);
+    expect(maps.includePaths["public-only"]).toBeUndefined();
+  });
+
+  it("accepts a per-target allowlist for a repo only that target lists", () => {
+    const nested = {
+      targets: {
+        rockenhaus: {
+          instance: "rockenhaus-public",
+          bucket: "rockenhaus-search-public",
+          repos: ["rockenhaus-litigation-public"],
+          includePaths: { "rockenhaus-litigation-public": ["_corpus/"] },
+        },
+      },
+    };
+    expect(validateIncludePathsConfig(nested)).toEqual([]);
+  });
+
+  it("refuses a nested allowlist naming a repo not in that target", () => {
+    const nested = {
+      targets: {
+        rockenhaus: {
+          instance: "rockenhaus-public",
+          bucket: "rockenhaus-search-public",
+          repos: ["rockenhaus-litigation-public"],
+          includePaths: { "someone-else": ["_corpus/"] },
+        },
+      },
+    };
+    expectRefusal(
+      () => assertIncludePathsConfig(nested),
+      "include_paths_unknown_repo",
+      "targets.rockenhaus.includePaths",
+      "someone-else",
+    );
   });
 });
