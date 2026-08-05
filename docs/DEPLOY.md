@@ -103,11 +103,52 @@ curl -sS -H "Authorization: Bearer YOUR_TOKEN" \
 
 Run the query Worker and MCP Worker against different AI Search instances when you want browser Q&A and agent retrieval on different corpora. Use two R2 buckets, two instances, and different `instance_name` values in each wrangler file.
 
-## 8. CI
+### Third query surface (rockenhaus pattern)
 
-`.github/workflows/ci.yml` runs `typecheck` + `vitest` on GitHub-hosted runners (fork-safe).
-Production deploy and corpus sync are gated to `main` on fleet runners; config is
-materialized from GitHub secrets. Skyphusion operators: [docs/skyphusion/OPERATOR.md](docs/skyphusion/OPERATOR.md).
+A second public query Worker can share `src/index.ts` with its own wrangler file, AI Search
+instance, and R2 bucket. This repo ships that pattern as `wrangler.rockenhaus.toml` +
+`npm run deploy:rockenhaus` / `npm run sync:rockenhaus`. For your own product:
+
+1. Create bucket + AI Search instance.
+2. Add a target in `targets.json` (optionally with nested `includePaths` for a fail-closed
+   allowlist -- search-mcp#62).
+3. Copy `wrangler.rockenhaus.toml` as a template, set `instance_name`, origins, route.
+4. Deploy with `wrangler deploy -c your.toml`.
+
+### Path bounds in `targets.json`
+
+- **Top-level** `includePaths` / `excludePaths`: same rule for every target that lists the repo.
+- **Nested under a target**: only that target; wins per-repo when both layers set the same key.
+- An empty allowlist entry (`[]`) is an error. An entry that matches zero tracked files refuses
+  the sync (exit 2) so a rename cannot silently empty a live corpus.
+
+See README "Bounding a corpus" and `scripts/targets.json.example`.
+
+## 8. CI and release
+
+This repo is **public**. GitHub-hosted `ubuntu-latest` runners only (the org fleet pool does
+not accept public-repo jobs).
+
+| Trigger | What runs |
+| --- | --- |
+| PR / push to `main` | `typecheck` (Workers + scripts projects) + `vitest` (+ coverage / CodeQL as configured) |
+| Tag `v*` on `main` | After CI: materialize config from secrets, deploy public query + internal MCP + rockenhaus Workers |
+| GitHub Release published | `publish-npm.yml` publishes `@skyphusion/search-mcp` |
+
+Tag must match `package.json` version. Merge alone never deploys. Skyphusion operators:
+[docs/skyphusion/OPERATOR.md](docs/skyphusion/OPERATOR.md).
+
+## 9. Operator tooling (git clone, not npm)
+
+These live under `scripts/` for people who hold production secrets; they are not required for a
+simple self-host from the npm package:
+
+| Script | Role |
+| --- | --- |
+| `materialize-config.mjs` | Write wrangler + targets from CI env secrets |
+| `guard-targets-additive.mjs` | Refuse non-additive `targets.json` edits (mirror-prune safety) |
+| `escrow-targets.mjs` | Age-escrow + restore proof for `SKYPHUSION_TARGETS_JSON` |
+| `corpus-boundary.mjs` | Public-target visibility / restrictedRepos checks (used by sync) |
 
 ## Troubleshooting
 
@@ -116,6 +157,8 @@ materialized from GitHub secrets. Skyphusion operators: [docs/skyphusion/OPERATO
 | Empty search results | R2 objects present? `npx wrangler ai-search stats INSTANCE` |
 | Sync exits 2 with `include_paths_*` | An `includePaths` allowlist matched nothing, named an unknown repo, or was emptied by `excludePaths`. The message names the repo and the prefix; fix `targets.json` and re-run |
 | TypeScript not indexed | Sync remaps to `.txt`; re-run sync + reindex job |
+| Reindex red after green R2 upload | Cooldown `7020` or connect `7017` -- `sync-runner` retries both; wait or re-run reindex-only |
 | MCP 401 | `MCP_TOKEN` set? Bearer header exact match? |
 | `/ask` 403 origin | `ALLOWED_ORIGINS` includes the page origin |
 | `/ask` 403 turnstile | `TURNSTILE_SECRET` set and widget sitekey matches |
+| `hybrid_search` still null after update | Open-beta gap: flag accepted, not persisted (see OPERATOR.md) |

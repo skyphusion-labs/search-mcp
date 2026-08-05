@@ -56,25 +56,34 @@ Provision R2 + AI Search, sync your corpus, deploy both Workers. Step-by-step: [
 
 ## Skyphusion production
 
-This repo is the production home for Skyphusion AI Search (`search.vivijure.com`,
-`search-internal.vivijure.com`). Config is materialized from GitHub Actions secrets at deploy/sync
-time; do not commit `wrangler.toml`, `wrangler.mcp.toml`, or `scripts/targets.json`.
+This repo is the production home for three AI Search surfaces:
 
-- [Operator runbook](docs/skyphusion/OPERATOR.md) -- secrets, topology, bootstrap
-- [Cutover record (2026-07-08)](docs/skyphusion/CUTOVER.md) -- migration history, failure log, archive steps
+| Surface | Host | Worker config |
+| --- | --- | --- |
+| Public docs / marketing | `search.vivijure.com` | secret `SKYPHUSION_WRANGLER_TOML` → `wrangler.toml` at CI |
+| Internal MCP | `search-internal.vivijure.com` | secret `SKYPHUSION_WRANGLER_MCP_TOML` |
+| Rockenhaus court records | `search.rockenhaus.net` | committed `wrangler.rockenhaus.toml` |
+
+Do not commit `wrangler.toml`, `wrangler.mcp.toml`, or `scripts/targets.json` (gitignored).
+Rockenhaus is the exception: its wrangler file is public and tracked.
+
+- [Operator runbook](docs/skyphusion/OPERATOR.md) -- secrets, topology shape, escrow, reindex
+- [Cutover record (2026-07-08)](docs/skyphusion/CUTOVER.md) -- migration history (historical)
 
 ## Workers
 
 | Worker | Entry | Endpoint | Auth |
 | --- | --- | --- | --- |
-| Query | `wrangler.toml` | `POST /ask`, `GET /health` | Turnstile (optional) + CORS allowlist |
-| MCP | `wrangler.mcp.toml` | `POST /mcp`, `GET /health` | `Authorization: Bearer` (fail closed) |
+| Query (public) | `wrangler.toml` | `POST /ask`, `GET /health` | Turnstile (optional) + CORS allowlist |
+| MCP (internal) | `wrangler.mcp.toml` | `POST /mcp`, `GET /health` | `Authorization: Bearer` (fail closed) |
+| Query (rockenhaus) | `wrangler.rockenhaus.toml` | `POST /ask`, `GET /health` | CORS allowlist (court-record origins) |
 
-Deploy separately so browser traffic and agent traffic can bind different AI Search instances if you want.
+Deploy separately so browser traffic and agent traffic can bind different AI Search instances.
 
 ```sh
-npm run deploy       # query Worker
-npm run deploy:mcp   # MCP Worker
+npm run deploy              # public query Worker
+npm run deploy:mcp          # MCP Worker
+npm run deploy:rockenhaus   # rockenhaus query Worker (uses committed wrangler file)
 wrangler secret put MCP_TOKEN -c wrangler.mcp.toml
 wrangler secret put TURNSTILE_SECRET   # optional; skips verification when unset
 ```
@@ -101,10 +110,23 @@ wrangler secret put TURNSTILE_SECRET   # optional; skips verification when unset
 export R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... CLOUDFLARE_ACCOUNT_ID=...
 export CORPUS_GIT_ORG=your-org GITHUB_TOKEN=...   # for sync-runner clone auth
 
-npm run sync:dry     # plan upload for the default `corpus` target
-npm run sync         # upload + prune
-npm run sync:run     # isolated clone root, sync all targets, optional reindex
+npm run sync:dry          # plan upload for the default `corpus` target
+npm run sync              # upload + prune
+npm run sync:public       # skyphusion public target (when targets.json has it)
+npm run sync:internal     # skyphusion internal target
+npm run sync:rockenhaus   # rockenhaus target
+npm run sync:run          # isolated clone root, sync all targets, optional reindex
 ```
+
+Useful npm scripts (also `npx` CLIs for the first two after install):
+
+| Script | Role |
+| --- | --- |
+| `search-mcp-sync` / `npm run sync` | One-target R2 sync |
+| `search-mcp-sync-run` / `npm run sync:run` | Clone/fetch + multi-target + reindex |
+| `npm run guard:targets` | Additive-only targets.json check |
+| `npm run escrow` | Age-escrow + restore proof for targets secret |
+| `npm run materialize-config` | CI: write wrangler + targets from env secrets |
 
 The sync remaps non-native extensions (`.ts`, `.tsx`, extensionless `Dockerfile`, `.service`, etc.) to `.txt` keys so AI Search indexes them. See `scripts/sync-ingest.mjs`.
 
@@ -206,13 +228,16 @@ before dispatching:
 2. **The post-job cooldown.** Even once a job ends, a new one is refused for a cooldown window
    with `sync_in_cooldown [code: 7020]`. Waiting for the job to end is necessary but not
    sufficient, so we retry until it clears.
+3. **Transient connect failures.** `unable_to_connect_to_ai_search [code: 7017]` on jobs create
+   is retried under the same budget as cooldown (search-mcp#73). Treating it as terminal made
+   the whole sync red while R2 already had the new objects.
 
 Waiting (rather than skipping) means the job we start always lands strictly after our own
 upload, so it sees every object this run wrote. Merge bursts still coalesce: a waiting run holds
 the workflow concurrency group, and GitHub keeps only the newest queued run, so the runs behind
 it collapse instead of each firing their own reindex.
 
-Each wait has its own budget (10 min in-flight, 10 min cooldown) rather than one shared
+Each wait has its own budget (10 min in-flight, 10 min cooldown/connect) rather than one shared
 deadline, since the two are additive on a perfectly healthy path: a run can wait minutes for an
 in-flight reindex and then still owe a cooldown wait.
 

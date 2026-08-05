@@ -10,16 +10,15 @@ materialized at deploy/sync time by `scripts/materialize-config.mjs`. Never comm
 
 ## Instances
 
-| Instance | Worker | Host | Corpus |
-| --- | --- | --- | --- |
-| `skyphusion-public` | `skyphusion-search` | `search.vivijure.com` | Public GitHub repos only |
-| `skyphusion-internal` | `skyphusion-search-internal-mcp` | `search-internal.vivijure.com` | Public + internal repos (bearer-gated MCP) |
+| Instance | Worker name | Host | Config | Corpus |
+| --- | --- | --- | --- | --- |
+| `skyphusion-public` | `skyphusion-search` | `search.vivijure.com` | secret → `wrangler.toml` | Public GitHub repos only |
+| `skyphusion-internal` | `skyphusion-search-internal-mcp` | `search-internal.vivijure.com` | secret → `wrangler.mcp.toml` | Public + internal (bearer MCP) |
+| `rockenhaus-public` | `rockenhaus-search` | `search.rockenhaus.net` | committed `wrangler.rockenhaus.toml` | `rockenhaus-litigation-public` `_corpus/` only |
 
-`rockenhaus-litigation` (private) is never a sync source. The public mirror
-`rockenhaus-litigation-public` feeds the separate **rockenhaus** target
-(`rockenhaus-public` AI Search / `rockenhaus-search-public` R2 /
-`search.rockenhaus.net`), fail-closed to `_corpus/` via per-target `includePaths`
-(search-mcp#58).
+`rockenhaus-litigation` (private) is **never** a sync source. The public mirror
+`rockenhaus-litigation-public` feeds the rockenhaus target, fail-closed via nested
+`includePaths` (search-mcp#58 / #62). Tag deploy (`v*`) ships all three Workers.
 
 ## GitHub secrets (search-mcp repo)
 
@@ -35,7 +34,10 @@ infra tier) and copied into GitHub Actions secrets on `search-mcp`:
 | `CORPUS_READ_TOKEN` | `CORPUS_READ_TOKEN` | Conrad operator PAT from `~conrad/github.env` (`GITHUB_PERSONAL_ACCESS_TOKEN`); full org read for private repo clones + visibility guard |
 | `SKYPHUSION_WRANGLER_TOML` | Public query Worker config (see below) |
 | `SKYPHUSION_WRANGLER_MCP_TOML` | Internal MCP Worker config (see below) |
-| `SKYPHUSION_TARGETS_JSON` | Corpus repo lists (see below) |
+| `SKYPHUSION_TARGETS_JSON` | Corpus repo lists (repo secret; also org-shared with `crew-secrets`, search-mcp#65) |
+
+Retired (search-mcp#65): `CREW_SECRETS_ESCROW_TOKEN` -- do not recreate. Escrow publish runs
+on private `crew-secrets` now.
 
 Wrangler runtime secrets (`MCP_TOKEN`, `TURNSTILE_SECRET`) stay on the Workers via
 `wrangler secret put` and persist across deploys.
@@ -48,7 +50,8 @@ that the R2 corpus is intact.
 
 ### The two gates before a reindex can start
 
-AI Search rejects a new job for **two different reasons**, and both must be cleared (#12):
+AI Search rejects a new job for **three different reasons**; the runner clears all of them
+before treating reindex as failed (#12, #73):
 
 1. **A job is in flight.** Dispatching anyway does not queue; Cloudflare ends the running job
    with `end_reason: "new_job_has_started"` and restarts it. `sync-runner` waits for
@@ -56,6 +59,8 @@ AI Search rejects a new job for **two different reasons**, and both must be clea
 2. **The post-job cooldown.** Even after a job ends, AI Search refuses a new one for a cooldown
    window with `sync_in_cooldown [code: 7020]`. **Waiting for the job to end is necessary but
    not sufficient.** `sync-runner` retries until it clears.
+3. **Transient connect.** `unable_to_connect_to_ai_search [code: 7017]` on jobs create is
+   retried under the same budget as cooldown. R2 upload already succeeded in that case.
 
 **Measured 2026-07-16** (`skyphusion-internal`, corpus ~3133 objects):
 
@@ -235,10 +240,16 @@ secret's privacy rationale while still being unsafe to rebuild from (mirror-prun
    never reconstruct from this doc.
 2. Edit a copy; prove the edit is additive:
    `node scripts/guard-targets-additive.mjs --old <before> --new <after>`
-3. `gh secret set SKYPHUSION_TARGETS_JSON -R skyphusion-labs/search-mcp < after.json`
-   (stdin only).
-4. Re-run `escrow-targets` and verify at the artifact (`verify-escrow.sh`).
-5. Then let `corpus-sync` run.
+3. Write **both** the repo secret and the org secret (they should match):
+   `gh secret set SKYPHUSION_TARGETS_JSON -R skyphusion-labs/search-mcp < after.json`
+   `gh secret set SKYPHUSION_TARGETS_JSON --org skyphusion-labs --visibility selected --repos search-mcp,crew-secrets < after.json`
+   (stdin only; never argv).
+4. Re-escrow from **crew-secrets** (preferred, search-mcp#65):
+   Actions → `escrow-search-mcp-targets` → publish. Or prove only with publish off.
+   Verify before merge: `bash scripts/verify-escrow.sh swarm-secrets/search-mcp-targets`.
+   The public search-mcp `escrow-targets` workflow is prove-only by default; do not rely
+   on its publish path.
+5. Then let `corpus-sync` run (or `workflow_dispatch` it).
 
 ## hybrid_search (search-mcp#59)
 
@@ -261,16 +272,17 @@ bucket-scoped tokens failed S3 auth during cutover). Mint via privileged token a
 value with **no trailing newline** (`jq -j`, not `jq -r`). Roll once, wait ~15s, verify
 list+put locally, then `gh secret set` from files. Full failure log: [CUTOVER.md](./CUTOVER.md).
 
-## Cutover checklist
+## Cutover checklist (2026-07-08 -- mostly historical)
 
 1. ~~Merge the search-mcp consolidation PR.~~ Done (#4, #5).
-2. ~~Set all eight repo secrets on `search-mcp`.~~ Done (2026-07-08).
+2. ~~Set repo secrets on `search-mcp`.~~ Done (2026-07-08).
 3. ~~Re-scope `SEARCH_DISPATCH_TOKEN` org PAT to `search-mcp`.~~ Done.
-4. **Merge constellation `corpus-notify` retarget PRs** (nine repos; local edits exist, not on `main` yet).
-5. ~~Run `corpus-sync` manually once; confirm green.~~ Done ([28966994684](https://github.com/skyphusion-labs/search-mcp/actions/runs/28966994684)).
+4. ~~Constellation `corpus-notify` retargets.~~ Done (see CUTOVER.md).
+5. ~~Run `corpus-sync` manually once; confirm green.~~ Done.
 6. ~~Verify health + MCP.~~ Done.
-7. Re-seed crew-secrets R2 escrow (`143953b0…` token id).
-8. Archive `skyphusion-labs/skyphusion-search` (**after** step 4; disable Actions first).
+7. ~~Archive `skyphusion-labs/skyphusion-search`.~~ Done.
+8. Rockenhaus surface live (search-mcp#58, 2026-08-04): target + sync + `search.rockenhaus.net`.
+9. Escrow on crew-secrets + org secret (search-mcp#65, 2026-08-04).
 
 ## MCP client wiring
 

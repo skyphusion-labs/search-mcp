@@ -40,14 +40,14 @@ custom domains (`search.vivijure.com`, `search-internal.vivijure.com`), R2 bucke
 
 ### search-mcp
 
-- **#4** `feat(ci): consolidate Skyphusion production into search-mcp` — materialize-config,
+- **#4** `feat(ci): consolidate Skyphusion production into search-mcp` -- materialize-config,
   deploy + corpus-sync workflows, operator docs, targets lists.
-- **#5** `fix(ci): ubuntu-latest for deploy and corpus-sync` — public repo cannot use org
+- **#5** `fix(ci): ubuntu-latest for deploy and corpus-sync` -- public repo cannot use org
   fleet runners; deploy and corpus-sync were stuck queued indefinitely.
 
 ### crew-secrets
 
-- **#85** `feat(shared): escrow search-mcp CI creds` — `CLOUDFLARE_ACCOUNT_ID`,
+- **#85** `feat(shared): escrow search-mcp CI creds` -- `CLOUDFLARE_ACCOUNT_ID`,
   `SEARCH_MCP_CF_API_TOKEN`, `SEARCH_MCP_R2_*`, `CORPUS_READ_TOKEN` in
   `secrets-shared.env.age`.
 
@@ -175,6 +175,6 @@ Replace stale pointers:
 
 ## Related docs
 
-- [OPERATOR.md](./OPERATOR.md) — live topology, secret mapping, bootstrap commands
-- [../DEPLOY.md](../DEPLOY.md) — generic deploy + MCP wiring
-- [../notify-corpus-sync.snippet.yml](../notify-corpus-sync.snippet.yml) — constellation notify snippet
+- [OPERATOR.md](./OPERATOR.md) -- live topology, secret mapping, bootstrap commands
+- [../DEPLOY.md](../DEPLOY.md) -- generic deploy + MCP wiring
+- [../notify-corpus-sync.snippet.yml](../notify-corpus-sync.snippet.yml) -- constellation notify snippet
