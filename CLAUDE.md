@@ -1,11 +1,11 @@
 # CLAUDE.md -- search-mcp
 
 Corpus / search MCP and public query Workers for skyphusion-labs. See `README.md` for product
-overview and local setup.
+overview and local setup. Version is root **`package.json`** (trust pin + tags).
 
 ## Conventions
 
-- `npm run typecheck` is the CI gate: **both**
+- `npm run typecheck` is the CI gate: **dual typecheck** -- **both**
   `tsc --noEmit` (Workers: `src` + `index.test.ts`) **and**
   `tsc --noEmit -p tsconfig.scripts.json` (Node: `scripts/**/*.test.ts`). Run it before pushing.
 - Conventional Commits. SemVer in root `package.json` (`0.MINOR.PATCH` while pre-1.0; trust
@@ -18,19 +18,39 @@ overview and local setup.
 | --- | --- |
 | `src/index.ts` | Public `/ask` query Worker (CORS, Turnstile, rate limit, origin profiles) |
 | `src/mcp.ts` | Bearer-gated MCP Worker (`search` tool) |
-| `scripts/sync.mjs` | One-target git → R2 sync + prune |
+| `scripts/sync.mjs` | One-target git -> R2 sync + prune |
 | `scripts/sync-runner.mjs` | Clone/fetch, multi-target sync, reindex (cooldown 7020 + connect 7017 retry) |
 | `scripts/sync-ingest.mjs` | Extension remap, `includePaths`/`excludePaths` (top-level + per-target) |
 | `scripts/config-paths.mjs` | Resolve `targets.json` / clone root for npm vs git-clone layouts |
 | `scripts/guard-targets-additive.mjs` | Refuse non-additive targets.json edits (mirror-prune safety) |
 | `scripts/escrow-targets.mjs` | Age-escrow + restore proof for `SKYPHUSION_TARGETS_JSON` |
 | `scripts/materialize-config.mjs` | CI: write wrangler + targets from secrets |
-| `scripts/corpus-boundary.mjs` | Public-target visibility / restrictedRepos checks |
+| `scripts/corpus-boundary.mjs` | Public-target visibility / restricted entrée checks |
 | `wrangler.toml.example` / `wrangler.mcp.toml.example` | Template configs (prod skyphusion configs are secrets) |
 | `wrangler.rockenhaus.toml` | **Committed** rockenhaus Worker (public court-record surface) |
 | `docs/DEPLOY.md` | Generic self-host deploy |
-| `docs/skyphusion/OPERATOR.md` | Skyphusion production operator guide |
+| `docs/skyphusion/OPERATOR.md` | Skyphusion production operator guide (escrow + targets shape) |
 | `docs/skyphusion/CUTOVER.md` | 2026-07-08 migration record (historical) |
+
+## Three Workers (tag deploy ships all)
+
+| Surface | Role |
+| --- | --- |
+| Public query | Browser `/ask` (CORS + Turnstile + rate limit) |
+| Internal MCP | Bearer-gated agent `search` tool |
+| Rockenhaus | `search.rockenhaus.net` -- public court-record corpus only (`wrangler.rockenhaus.toml`) |
+
+`includePaths` / `excludePaths` apply top-level (every target that lists the repo) and/or
+per-target. Rockenhaus is fail-closed to the public mirror paths only; private litigation trees
+are never a sync source. Shape + operator steps: `docs/skyphusion/OPERATOR.md`.
+
+### Escrow (Skyphusion operator)
+
+Prod `targets.json` and deploy/sync creds live outside this public tree. Operator path (shape only
+in public docs): decrypt age escrow under **crew-secrets** `swarm-secrets/search-mcp-targets/`, edit
+additively, re-escrow (prefer crew-secrets `escrow-search-mcp-targets` Action; prove with
+`bash scripts/verify-escrow.sh swarm-secrets/search-mcp-targets`). Public `escrow-targets` workflow
+is prove-only by default. Never put live targets or tokens in a tracked file or chat transcript.
 
 ## Release / tagging
 
