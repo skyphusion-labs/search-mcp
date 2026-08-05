@@ -37,9 +37,9 @@ overview and local setup.
 **TAG-GATED deploy.** `.github/workflows/ci.yml`:
 
 - Push/PR to `main`: CI only (typecheck + tests). **Does not** deploy production.
-- Pushed **`v*`** tag: after CI, deploy job runs public query + internal MCP Workers.
-  Rockenhaus is deployed separately (`npm run deploy:rockenhaus`) with an operator token that
-  has Workers Routes on the rockenhaus.net zone (the CI token does not).
+- Pushed **`v*`** tag: after CI, deploy job runs **three** Workers: public query, internal MCP,
+  and rockenhaus (`search.rockenhaus.net`). CI token `skyphusion-search-ci` holds Workers Routes
+  on both vivijure.com and rockenhaus.net zones.
 
 Tag **must** match root `package.json` version (`vX.Y.Z` == version `X.Y.Z`). Workflow refuses a
 mismatch (fc#864). Tag must be an ancestor of `origin/main`.

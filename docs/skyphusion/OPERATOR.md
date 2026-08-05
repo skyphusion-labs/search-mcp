@@ -18,7 +18,7 @@ materialized at deploy/sync time by `scripts/materialize-config.mjs`. Never comm
 
 `rockenhaus-litigation` (private) is **never** a sync source. The public mirror
 `rockenhaus-litigation-public` feeds the rockenhaus target, fail-closed via nested
-`includePaths` (search-mcp#58 / #62). Tag deploy (`v*`) ships public + MCP; rockenhaus is `npm run deploy:rockenhaus` with an operator token that has Workers Routes on the rockenhaus.net zone (CI `skyphusion-search-ci` returns auth 10000 on that zone's routes).
+`includePaths` (search-mcp#58 / #62). Tag deploy (`v*`) ships all three Workers. CI token `skyphusion-search-ci` has Zone Read + Workers Routes Write on vivijure.com and rockenhaus.net (policy updated 2026-08-05; secret value unchanged).
 
 ## GitHub secrets (search-mcp repo)
 
