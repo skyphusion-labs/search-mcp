@@ -102,10 +102,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run deploy:mcp
-      # wrangler.rockenhaus.toml is committed (public court-record surface; no secret
-      # topology). Tag deploy keeps it level with the other two Workers.
-      - name: Deploy rockenhaus query Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run deploy:rockenhaus
+      # rockenhaus is NOT tag-deployed here. The skyphusion-search-ci token can
+      # upload the Worker script but lacks Workers Routes on the rockenhaus.net
+      # zone (auth 10000 on /zones/.../workers/routes). Deploy rockenhaus with an
+      # operator token that holds that zone: `npm run deploy:rockenhaus`.

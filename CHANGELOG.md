@@ -27,6 +27,10 @@ connect retry, operator escrow relocate, docs brought to parity with the tree.
 
 ### Ops / custody
 
+- **Rockenhaus tag deploy:** CI token cannot apply routes on rockenhaus.net (auth 10000).
+  Tag deploy ships public + MCP only; rockenhaus remains operator-token deploy until the
+  CI token gains that zone's Workers Routes permission.
+
 - **Escrow steady state** (search-mcp#65). Org secret `SKYPHUSION_TARGETS_JSON`; preferred
   re-escrow is the private crew-secrets workflow `escrow-search-mcp-targets`. Public
   search-mcp `escrow-targets` publish defaults off; `CREW_SECRETS_ESCROW_TOKEN` retired.
