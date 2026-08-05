@@ -21,6 +21,7 @@ overview and local setup.
 | `scripts/sync.mjs` | One-target git → R2 sync + prune |
 | `scripts/sync-runner.mjs` | Clone/fetch, multi-target sync, reindex (cooldown 7020 + connect 7017 retry) |
 | `scripts/sync-ingest.mjs` | Extension remap, `includePaths`/`excludePaths` (top-level + per-target) |
+| `scripts/config-paths.mjs` | Resolve `targets.json` / clone root for npm vs git-clone layouts |
 | `scripts/guard-targets-additive.mjs` | Refuse non-additive targets.json edits (mirror-prune safety) |
 | `scripts/escrow-targets.mjs` | Age-escrow + restore proof for `SKYPHUSION_TARGETS_JSON` |
 | `scripts/materialize-config.mjs` | CI: write wrangler + targets from secrets |
