@@ -4,10 +4,12 @@ Thanks for helping improve search-mcp.
 
 ## Before you open a PR
 
-1. Run `npm run typecheck` and `npm test`.
+1. Run `npm run typecheck` and `npm test`. Typecheck is two projects: Workers
+   (`tsc --noEmit`) and scripts tests (`tsc --noEmit -p tsconfig.scripts.json`).
 2. Keep changes focused; match existing style (TypeScript strict, vanilla JS for the widget, no build step).
 3. No em-dashes or en-dashes in prose (use commas, semicolons, or parentheses).
-4. No secrets in the diff (tokens, real `wrangler.toml`, R2 keys).
+4. No secrets in the diff (tokens, real `wrangler.toml` / `wrangler.mcp.toml`, R2 keys,
+   live `targets.json`). `wrangler.rockenhaus.toml` is intentionally committed.
 
 ## What fits
 
@@ -22,11 +24,13 @@ Thanks for helping improve search-mcp.
 - Replacement of Cloudflare AI Search / R2 / Workers with non-Cloudflare alternatives
 - Features that expand scope without a clear, general-purpose use case
 
-## Maintainers: npm release
+## Maintainers: release (Workers + npm)
 
-1. Bump `version` in `package.json` (semver).
-2. Create a GitHub Release whose tag matches (`v0.1.0` for package version `0.1.0`).
-3. The [Publish npm package](.github/workflows/publish-npm.yml) workflow runs on release publish (needs org secret `NPM_TOKEN` with publish access to `@skyphusion`).
+1. Bump `version` in `package.json` and update `CHANGELOG.md` on a release PR; merge to `main`.
+2. Tag `vX.Y.Z` matching package.json and push the tag -- that deploys the three production
+   Workers (public, MCP, rockenhaus). See `CLAUDE.md`.
+3. Create a **GitHub Release** for the same tag (`gh release create vX.Y.Z ...`). Publishing
+   the Release runs [publish-npm.yml](.github/workflows/publish-npm.yml) (org secret `NPM_TOKEN`).
 
 ## Pull requests
 
