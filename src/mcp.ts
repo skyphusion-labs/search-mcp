@@ -4,7 +4,7 @@ import type { McpEnv, AiSearchChunk, SearchResultChunk } from "./env";
 // AI Search instance. Deploy separately from the public /ask query Worker when you want
 // machine-to-machine retrieval without exposing the corpus through a browser widget.
 
-const SERVER_INFO = { name: "search-mcp", version: "0.2.0" };
+const SERVER_INFO = { name: "search-mcp", version: "0.4.0" };
 const PROTOCOL_VERSION = "2025-06-18";
 
 // At most this many chunks per (repo, path) survive dedup; the rest of the budget
