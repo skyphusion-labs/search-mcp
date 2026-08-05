@@ -132,8 +132,7 @@ not accept public-repo jobs).
 | Trigger | What runs |
 | --- | --- |
 | PR / push to `main` | `typecheck` (Workers + scripts projects) + `vitest` (+ coverage / CodeQL as configured) |
-| Tag `v*` on `main` | After CI: materialize config from secrets, deploy public query + internal MCP Workers |
-| Manual | `npm run deploy:rockenhaus` with a token that can manage routes on rockenhaus.net |
+| Tag `v*` on `main` | After CI: materialize config from secrets, deploy public query + internal MCP + rockenhaus Workers |
 | GitHub Release published | `publish-npm.yml` publishes `@skyphusion/search-mcp` |
 
 Tag must match `package.json` version. Merge alone never deploys. Skyphusion operators:
