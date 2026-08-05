@@ -138,6 +138,19 @@ not accept public-repo jobs).
 Tag must match `package.json` version. Merge alone never deploys. Skyphusion operators:
 [docs/skyphusion/OPERATOR.md](docs/skyphusion/OPERATOR.md).
 
+### Workflows in `.github/workflows/`
+
+| Workflow | Role |
+| --- | --- |
+| `ci.yml` | PR/main typecheck + tests; tag `v*` deploy (three Workers) |
+| `typecheck.yml` | Standalone typecheck (badge) |
+| `code-coverage.yml` | Coverage report on PRs |
+| `adversarial-audit.yml` | LLM red-team advisory (not a merge gate) |
+| `corpus-sync.yml` | Merge-driven + daily R2 sync and reindex |
+| `corpus-notify.yml` | Template/reference for constellation repos (also `docs/corpus-notify.workflow.yml`) |
+| `escrow-targets.yml` | Prove-only targets escrow on this public repo (publish default off; prefer crew-secrets) |
+| `publish-npm.yml` | Publish `@skyphusion/search-mcp` on GitHub Release |
+
 ## 9. Operator tooling (git clone, not npm)
 
 These live under `scripts/` for people who hold production secrets; they are not required for a
