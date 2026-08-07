@@ -6,7 +6,8 @@
 
 Open-source toolkit for [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/):
 
-1. **MCP Worker** (`src/mcp.ts`) -- bearer-gated Streamable-HTTP MCP with a `search` tool for agents.
+1. **MCP Worker** (`src/mcp.ts`) -- bearer-gated Streamable-HTTP MCP for agents:
+   `search`, `list_repos`, `get_file`, `ask`, `corpus_status`, plus `corpus://` resources.
 2. **Query Worker** (`src/index.ts`) -- CORS + Turnstile + rate-limited `POST /ask` that streams answers for a browser widget.
 3. **Corpus sync** (`scripts/sync.mjs`, `scripts/sync-runner.mjs`) -- git-tracked sources to R2, with extension remapping so TypeScript, Dockerfiles, and other text AI Search would otherwise skip get indexed.
 
@@ -103,6 +104,20 @@ wrangler secret put TURNSTILE_SECRET   # optional; skips verification when unset
 ```
 
 `MCP_TOKEN` accepts a single token or comma-separated `name=token` pairs for per-consumer attribution in logs.
+
+### MCP tools (agents)
+
+| Tool | Role |
+| --- | --- |
+| `list_repos` | Exact repo names for filters (`CORPUS_REPOS` or R2 prefixes) |
+| `search` | Hybrid/keyword/vector chunks; optional `repos`, `path_prefix`, `min_score`, `rewrite` |
+| `get_file` | Capped R2 read by `repo` + `path` (needs `CORPUS` binding) |
+| `ask` | One grounded answer via chatCompletions + source list |
+| `corpus_status` | Last sync metadata (`_meta/corpus-status.json` from `sync.mjs`) |
+
+Resources: `corpus://catalog`, `corpus://skill`. Prefer **list_repos → search → get_file**; use **ask** when you want prose rather than raw chunks.
+
+Bind the same R2 bucket the sync uploads to as `CORPUS` on the MCP Worker so `get_file` and status work. Optional `CORPUS_REPOS` JSON pins the catalog without listing R2.
 
 ## Corpus sync
 

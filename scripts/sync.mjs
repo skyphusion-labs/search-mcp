@@ -350,13 +350,36 @@ async function main() {
     ContinuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
   } while (ContinuationToken);
 
-  for (let i = 0; i < stale.length; i += 1000) {
-    const batch = stale.slice(i, i + 1000);
+  // Never prune operator/meta keys written for MCP corpus_status.
+  const stalePrune = stale.filter((o) => o.Key && !o.Key.startsWith("_meta/"));
+  for (let i = 0; i < stalePrune.length; i += 1000) {
+    const batch = stalePrune.slice(i, i + 1000);
     await s3.send(
       new DeleteObjectsCommand({ Bucket, Delete: { Objects: batch } }),
     );
   }
-  console.log(`Pruned ${stale.length} stale objects.`);
+  console.log(`Pruned ${stalePrune.length} stale objects.`);
+
+  // MCP corpus_status + list_repos freshness (search-mcp agent tooling).
+  const status = {
+    ts: Date.now(),
+    ok: true,
+    target: targetName,
+    bucket: target.bucket,
+    instance: target.instance,
+    objectCount: plan.length,
+    repos: [...target.repos],
+    note: "Written by scripts/sync.mjs after successful upload+prune.",
+  };
+  await s3.send(
+    new PutObjectCommand({
+      Bucket,
+      Key: "_meta/corpus-status.json",
+      Body: Buffer.from(JSON.stringify(status, null, 2), "utf8"),
+      ContentType: "application/json",
+    }),
+  );
+  console.log("Wrote _meta/corpus-status.json for MCP corpus_status.");
   console.log("Done. AI Search will re-index on its next sync.");
 }
 

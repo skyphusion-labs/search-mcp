@@ -72,6 +72,18 @@ export interface AiSearchInstance {
   ): Promise<ReadableStream<Uint8Array> | AiSearchChatResponse>;
 }
 
+/** Written by corpus sync to R2 key `_meta/corpus-status.json` (and optional MCP cache). */
+export interface CorpusStatus {
+  ts: number;
+  ok: boolean;
+  target?: string;
+  bucket?: string;
+  instance?: string;
+  objectCount?: number;
+  repos?: string[];
+  note?: string;
+}
+
 export interface Env {
   SEARCH: AiSearchInstance;
   ASK_LIMITER: RateLimit;
@@ -96,4 +108,16 @@ export interface McpEnv {
   // present `Authorization: Bearer <token>`. When unset, the Worker refuses all
   // requests (fail closed).
   MCP_TOKEN?: string;
+  // Optional R2 bucket holding the same corpus AI Search indexes. Enables get_file,
+  // list_repos (prefix scan), and corpus_status (`_meta/corpus-status.json`).
+  CORPUS?: R2Bucket;
+  // Optional JSON array of repo names (or {"repos":["a","b"],"description":"..."}).
+  // Preferred for list_repos when set; otherwise R2 prefixes are used when CORPUS is bound.
+  CORPUS_REPOS?: string;
+  // Model for the `ask` tool (chatCompletions). Falls back to a Workers AI default.
+  GENERATION_MODEL?: string;
+  ASSISTANT_SYSTEM_PROMPT?: string;
+  // Soft default / hard ceiling for get_file (bytes). Defaults 64 KiB / 256 KiB.
+  GET_FILE_MAX_BYTES?: string;
+  GET_FILE_HARD_MAX_BYTES?: string;
 }

@@ -17,7 +17,7 @@ overview and local setup. Version is root **`package.json`** (trust pin + tags).
 | Path | Role |
 | --- | --- |
 | `src/index.ts` | Public `/ask` query Worker (CORS, Turnstile, rate limit, origin profiles) |
-| `src/mcp.ts` | Bearer-gated MCP Worker (`search` tool) |
+| `src/mcp.ts` | Bearer-gated MCP Worker (`search`, `list_repos`, `get_file`, `ask`, `corpus_status` + resources) |
 | `scripts/sync.mjs` | One-target git -> R2 sync + prune |
 | `scripts/sync-runner.mjs` | Clone/fetch, multi-target sync, reindex (cooldown 7020 + connect 7017 retry) |
 | `scripts/sync-ingest.mjs` | Extension remap, `includePaths`/`excludePaths` (top-level + per-target) |
