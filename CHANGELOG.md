@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.5.0
+
+MINOR: agent-facing MCP surface. Retrieval stays structured; agents can map the
+corpus, filter paths, open files, ask grounded questions, and read sync status.
+
+### Features (MCP Worker)
+
+- **Tools:** `search` (expanded), `list_repos`, `get_file`, `ask`, `corpus_status`.
+- **search knobs:** `path_prefix`, `retrieval_type` (hybrid/keyword/vector),
+  `rewrite`, `min_score`, `rerank`; richer tool description for agent routing.
+- **get_file:** optional `CORPUS` R2 binding; size-capped reads; tries bare key and
+  `.txt` remapped keys.
+- **ask:** non-stream `chatCompletions` with source list from returned chunks.
+- **corpus_status:** reads `_meta/corpus-status.json` written by `scripts/sync.mjs`.
+- **MCP resources:** `corpus://catalog`, `corpus://skill` (`resources/list` +
+  `resources/read`).
+- **list_repos:** `CORPUS_REPOS` var (JSON/CSV) or R2 prefix scan when `CORPUS` bound.
+
+### Sync
+
+- After upload+prune, write `_meta/corpus-status.json` and never prune `_meta/*`.
+
+### Config
+
+- `wrangler.mcp.toml.example`: optional `CORPUS` R2 + `CORPUS_REPOS` / generation vars.
+
 ## v0.4.0
 
 MINOR: per-target path maps, dual typecheck gate, rockenhaus deployment surface, reindex
