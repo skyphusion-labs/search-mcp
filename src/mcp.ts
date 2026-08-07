@@ -561,7 +561,8 @@ async function callAsk(
   if (repos === "bad") return { error: "'repos' must be an array of strings" };
   const pathPrefixes = normalizePathPrefixes(args.path_prefix);
   const max = Math.min(Math.max(Number(args.max_num_results) || 8, 1), 20);
-  const model = env.GENERATION_MODEL?.trim() || "@cf/meta/llama-3.1-8b-instruct";
+  // Match the public query Worker default used in production (skyphusion-search).
+  const model = env.GENERATION_MODEL?.trim() || "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
   const system =
     env.ASSISTANT_SYSTEM_PROMPT?.trim() ||
     "You are a documentation assistant. Answer only from the retrieved corpus context. " +
