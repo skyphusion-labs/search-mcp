@@ -177,6 +177,10 @@ custom_domain = true
 
 ## SKYPHUSION_WRANGLER_MCP_TOML
 
+Shape only (0.5.0+). Live secret also sets `workers_dev = false`, full `CORPUS_REPOS`,
+and production generation model. Tag deploy materializes this secret; without the
+`CORPUS` R2 binding, `get_file` / `corpus_status` degrade.
+
 ```toml
 # Internal MCP Worker -- ONLY Worker that binds skyphusion-internal.
 
@@ -184,6 +188,7 @@ name = "skyphusion-search-internal-mcp"
 main = "src/mcp.ts"
 compatibility_date = "2026-03-27"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = false
 
 [observability]
 enabled = true
@@ -191,6 +196,14 @@ enabled = true
 [[ai_search]]
 binding = "SEARCH"
 instance_name = "skyphusion-internal"
+
+[[r2_buckets]]
+binding = "CORPUS"
+bucket_name = "skyphusion-search-internal"
+
+[vars]
+GENERATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# CORPUS_REPOS = JSON array of repo names (list_repos catalog; omit to R2-prefix scan)
 
 [[routes]]
 pattern = "search-internal.vivijure.com"
