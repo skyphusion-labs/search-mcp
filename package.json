@@ -71,7 +71,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260713.1",
-    "@types/node": "^22.15.0",
+    "@types/node": "^26.2.0",
     "@vitest/coverage-istanbul": "^4.1.10",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
