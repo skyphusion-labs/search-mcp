@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.1
+
+PATCH: production default for the MCP `ask` generation model (#87), plus Cloudflare toolchain, aws-sdk s3, @types/node, and nanoid on main since v0.5.0.
+
+
 ## v0.5.0
 
 MINOR: agent-facing MCP surface. Retrieval stays structured; agents can map the

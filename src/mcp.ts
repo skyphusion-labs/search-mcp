@@ -10,7 +10,7 @@ import type {
 // Bearer-gated Streamable-HTTP MCP server over a Cloudflare AI Search instance
 // (and optional R2 corpus bucket). Deploy separately from the public /ask query Worker.
 
-const SERVER_INFO = { name: "search-mcp", version: "0.5.0" };
+const SERVER_INFO = { name: "search-mcp", version: "0.5.1" };
 const PROTOCOL_VERSION = "2025-06-18";
 
 // At most this many chunks per (repo, path) survive dedup; the rest of the budget
