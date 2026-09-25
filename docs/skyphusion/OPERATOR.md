@@ -317,5 +317,9 @@ Second-run verification:
 [29455578737](https://github.com/skyphusion-labs/search-mcp/actions/runs/29455578737)
 (cache hit, all fetch).
 
-Fleet JIT runners mount `/opt/corpus` when jobs set `CORPUS_ROOT=/opt/corpus`
-(see fleet-chezmoi `gha-dispatcher` README, image `:4`).
+**Do not set `CORPUS_ROOT=/opt/corpus`.** That path was mounted by the fleet JIT
+runner pool, which was decommissioned with the rest of the Hetzner fleet on
+2026-09-24 (fleet-chezmoi #2042). GitHub-hosted `ubuntu-latest` is the only live CI
+plane, `/opt/corpus` does not exist there, and the `CORPUS_ROOT` org variable is
+unset (verified 2026-09-25), so the workflow default of
+`${{ github.workspace }}/.corpus` is what actually applies. Leave it unset.
