@@ -82,9 +82,3 @@ git push origin vX.Y.Z
    (or `--generate-notes`). Publishing the Release fires `publish-npm.yml`.
 
 Merge alone never ships.
-
-## Crew + identity
-
-Crew members work as their own Unix + gh identity (`sudo -u <member> bash -lc '...'`). Crew commits
-use `skyphusion-<member>` identity, never Conrad's. Conrad devs only on his laptop
-(`Conrad Rockenhaus <conrad@skyphusion.org>`).
