@@ -8,11 +8,15 @@ name: corpus-sync
 #   - schedule: daily safety net for dropped or failed dispatches.
 #   - workflow_dispatch: manual re-run.
 #
-# Config (wrangler.toml, wrangler.mcp.toml, scripts/targets.json) is materialized from
-# Public repo -> GitHub-hosted runners (fleet pool rejects public-repo jobs).
+# Config (wrangler.toml, wrangler.mcp.toml, scripts/targets.json) is materialized at run time
+# from the SKYPHUSION_WRANGLER_TOML / SKYPHUSION_WRANGLER_MCP_TOML / SKYPHUSION_TARGETS_JSON
+# secrets by scripts/materialize-config.mjs (the sentence that used to end this line was
+# truncated; restored 2026-09-25).
+# Runner: GitHub-hosted ubuntu-latest, the only live CI plane.
 # CORPUS_ROOT defaults to ${{ github.workspace }}/.corpus; actions/cache restores it between
-# runs so sync-runner fetch-es instead of full-cloning. Fleet runners mount /opt/corpus when
-# a job sets CORPUS_ROOT=/opt/corpus (see fleet-chezmoi gha-dispatcher).
+# runs so sync-runner fetch-es instead of full-cloning. Do NOT set CORPUS_ROOT=/opt/corpus:
+# that path was mounted by the fleet JIT runners, which went with the 2026-09-24 teardown
+# (fleet-chezmoi #2042), and on a hosted runner it names a directory that does not exist.
 
 on:
   repository_dispatch:
