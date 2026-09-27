@@ -193,18 +193,40 @@
     }
 
     function handleEvent(block) {
-      var isChunks = /(^|\n)event:\s*chunks/.test(block);
-      var m = block.match(/(^|\n)data:\s?(.*)$/s);
-      if (!m) return;
-      var payload = m[2].trim();
+      // One SSE event block: an optional "event:" name plus one or more "data:" lines,
+      // which the SSE spec joins with "\n". An error event throws so the request's
+      // catch shows it: an upstream failure must never read as an empty corpus.
+      var name = "";
+      var lines = [];
+      block.split("\n").forEach(function (line) {
+        var f = line.match(/^(event|data):\s?(.*)$/);
+        if (!f) return;
+        if (f[1] === "event") name = f[2].trim();
+        else lines.push(f[2]);
+      });
+      if (!lines.length) {
+        if (name === "error") throw new Error("stream error");
+        return;
+      }
+      var payload = lines.join("\n").trim();
       if (payload === "[DONE]") return;
       var data;
       try {
         data = JSON.parse(payload);
       } catch (e) {
+        if (name === "error") throw new Error("stream error");
         return;
       }
-      if (isChunks) {
+      if (name === "error" || (data && data.error)) {
+        var err = data && data.error;
+        throw new Error(
+          (typeof err === "string" && err) ||
+            (err && err.message) ||
+            (data && data.message) ||
+            "stream error",
+        );
+      }
+      if (name === "chunks") {
         renderSources(data);
         return;
       }
@@ -246,7 +268,12 @@
           var buf = "";
           function pump() {
             return reader.read().then(function (r) {
-              if (r.done) return;
+              if (r.done) {
+                // Flush what is left: the final event may lack its trailing blank line.
+                buf += decoder.decode();
+                if (buf.trim()) handleEvent(buf);
+                return;
+              }
               buf += decoder.decode(r.value, { stream: true });
               var parts = buf.split("\n\n");
               buf = parts.pop();
