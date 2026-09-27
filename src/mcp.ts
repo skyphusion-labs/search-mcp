@@ -453,9 +453,9 @@ async function callSearch(
   const repos = parseReposArg(args.repos);
   if (repos === "bad") return { error: "'repos' must be an array of strings" };
   const pathPrefixes = normalizePathPrefixes(args.path_prefix);
-  if (args.path_prefix !== undefined && pathPrefixes === undefined && args.path_prefix !== "") {
-    // invalid type (not string/array of strings)
-    if (typeof args.path_prefix !== "string" && !Array.isArray(args.path_prefix)) {
+  if (args.path_prefix !== undefined) {
+    const pp = args.path_prefix;
+    if (typeof pp !== "string" && !(Array.isArray(pp) && pp.every((p) => typeof p === "string"))) {
       return { error: "'path_prefix' must be a string or array of strings" };
     }
   }
