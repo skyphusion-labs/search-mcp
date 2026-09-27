@@ -315,6 +315,20 @@ describe("mcp tools surface", () => {
     });
   });
 
+  it("list_repos reports an R2 listing failure as an error", async () => {
+    const env = envWithSearch({
+      CORPUS_REPOS: undefined,
+      CORPUS: {
+        list: async () => {
+          throw new Error("r2 unavailable");
+        },
+      } as unknown as R2Bucket,
+    });
+    const body = await call(env, "list_repos", {});
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0]?.text).toContain("r2 unavailable");
+  });
+
   it("get_file requires CORPUS binding", async () => {
     const body = await call(envWithSearch(), "get_file", { repo: "a", path: "b.md" });
     expect(body.result.isError).toBe(true);

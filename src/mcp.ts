@@ -356,6 +356,7 @@ async function resolveRepos(env: McpEnv): Promise<{
   repos: string[];
   source: "config" | "r2" | "empty";
   description?: string;
+  error?: string;
 }> {
   const fromConfig = parseCorpusRepos(env.CORPUS_REPOS);
   if (fromConfig.repos.length) {
@@ -367,6 +368,7 @@ async function resolveRepos(env: McpEnv): Promise<{
       return { repos, source: "r2" };
     } catch (err) {
       console.log("listReposFromR2 failed", String(err));
+      return { repos: [], source: "empty", error: String(err) };
     }
   }
   return { repos: [], source: "empty" };
@@ -625,7 +627,8 @@ async function handleToolCall(
 ): Promise<unknown> {
   switch (name) {
     case "list_repos": {
-      const { repos, source, description } = await resolveRepos(env);
+      const { repos, source, description, error } = await resolveRepos(env);
+      if (error) return toolErr(id, `list_repos failed: could not list CORPUS R2: ${error}`);
       const structured = { repos, source, description: description ?? CORPUS_BLURB };
       const text =
         repos.length === 0
