@@ -298,6 +298,15 @@ describe("mcp tools surface", () => {
     expect(chunks.map((c) => c.path)).toEqual(["docs/x.md"]);
   });
 
+  it("rejects a path_prefix array containing non-strings", async () => {
+    const body = await call(envWithSearch(), "search", {
+      query: "hello",
+      path_prefix: [1, 2],
+    });
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0]?.text).toContain("path_prefix");
+  });
+
   it("list_repos uses CORPUS_REPOS config", async () => {
     const body = await call(envWithSearch(), "list_repos", {});
     expect(body.result.structuredContent).toMatchObject({
