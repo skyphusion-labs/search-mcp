@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **`search` docs (#116):** the tool description, the `repos`, `path_prefix` and `min_score` parameter text, and the agent skill now state the filter limit. These filters apply after a capped upstream fetch, so a narrow filter can return no results while matches rank deeper. No behavior change.
+
 ## v0.6.0
 
 MINOR: `public/ask-widget.js` now reports an upstream failure as an error instead of the empty-corpus message. Anyone who copies that file into a site (skyphusion-net, vivijure-com, rockenhaus-litigation-public carry copies) behaves differently on upstream errors after taking this version, which is why this is a MINOR and not a PATCH. Also two MCP tool error-reporting fixes, a dependency security pin, and the dependency and CI updates on main since v0.5.1.
