@@ -49,6 +49,9 @@ const AGENT_SKILL = `# search-mcp agent skill
 - "How does X work?": search hybrid, then get_file on top hits, or ask
 - Always pass exact repo names from list_repos (not guessed)
 - path_prefix is a string prefix on path (e.g. "docs/" or "src/mcp.ts")
+- repos, path_prefix and min_score apply AFTER a capped upstream fetch (top 4x max_num_results, min 20, max 50).
+  Matches ranked below the cutoff are dropped. An empty filtered result does not prove nothing matches.
+  Retry with a more specific query or fewer filters.
 `;
 
 type JsonSchema = Record<string, unknown>;
@@ -73,6 +76,12 @@ const TOOLS: McpTool[] = [
     description:
       "Search the indexed corpus. Returns relevant chunks with repo, path, score, and text. " +
       "Deduplicated to at most 2 chunks per file. " +
+      "FILTER LIMIT: repos, path_prefix and min_score apply AFTER a capped upstream fetch. " +
+      "The fetch takes only the top-ranked chunks (4x max_num_results, at least 20, at most 50). " +
+      "Matching chunks ranked below that cutoff are dropped, not searched. " +
+      "A narrow filter can return \"No results.\" while matches exist deeper in the ranking. " +
+      "Treat filtered results as best-effort, as ask does. " +
+      "If a filtered search is empty, retry with a more specific query or fewer filters. " +
       CORPUS_BLURB,
     inputSchema: {
       type: "object",
@@ -86,12 +95,12 @@ const TOOLS: McpTool[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "Optional repo-name filter (exact match, e.g. [\"postern\", \"fleet-chezmoi\"]). Use list_repos for names.",
+            "Optional repo-name filter (exact match, e.g. [\"postern\", \"fleet-chezmoi\"]). Use list_repos for names. Applied after a capped fetch, so best-effort.",
         },
         path_prefix: {
           oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
           description:
-            "Optional path prefix filter (e.g. \"docs/\" or [\"src/\", \"docs/\"]). Match is on path only.",
+            "Optional path prefix filter (e.g. \"docs/\" or [\"src/\", \"docs/\"]). Match is on path only. Applied after a capped fetch, so best-effort.",
         },
         retrieval_type: {
           type: "string",
@@ -104,7 +113,8 @@ const TOOLS: McpTool[] = [
         },
         min_score: {
           type: "number",
-          description: "Drop chunks with score strictly below this value (0-1 scale from upstream).",
+          description:
+            "Drop chunks with score strictly below this value (0-1 scale from upstream). Applied after a capped fetch.",
         },
         rerank: {
           type: "boolean",

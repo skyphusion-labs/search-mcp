@@ -370,6 +370,30 @@ describe("mcp tools surface", () => {
     expect(body.result.structuredContent).toMatchObject({ ok: false });
   });
 
+  it("search description and skill state the post-fetch filter limit (#116)", async () => {
+    const env = envWithSearch();
+    const post = (body: unknown) =>
+      mcp.fetch(
+        new Request("https://search.example.com/mcp", {
+          method: "POST",
+          headers: { Authorization: "Bearer tok", "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        env,
+      );
+    const tools = (await (await post({ jsonrpc: "2.0", id: 1, method: "tools/list" })).json()) as {
+      result: { tools: { name: string; description: string }[] };
+    };
+    const search = tools.result.tools.find((t) => t.name === "search");
+    expect(search?.description).toContain("FILTER LIMIT");
+    expect(search?.description).toContain("AFTER a capped upstream fetch");
+    expect(search?.description).toContain("dropped");
+    const skill = (await (
+      await post({ jsonrpc: "2.0", id: 2, method: "resources/read", params: { uri: "corpus://skill" } })
+    ).json()) as { result: { contents: { text: string }[] } };
+    expect(skill.result.contents[0]?.text).toContain("AFTER a capped upstream fetch");
+  });
+
   it("lists tools and resources", async () => {
     const env = envWithSearch();
     const tools = await mcp.fetch(
