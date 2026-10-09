@@ -43,3 +43,4 @@ Sign off commits with `git commit -s` ([Developer Certificate of Origin](https:/
 ## License
 
 Contributions are licensed under AGPL-3.0-only, same as the project.
+clean-line
