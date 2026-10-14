@@ -87,7 +87,11 @@ jobs:
           fi
           if [ "$on_registry" = "1" ]; then
             set +e
-            out="$(npm publish --access public --provenance 2>&1)"
+            # prepublishOnly runs before the OIDC exchange. A probe that
+            # rewrites package.json can fail that script before npm exchanges
+            # the token. Ignore scripts on this call only. The real publish
+            # below still runs them.
+            out="$(npm publish --access public --provenance --ignore-scripts 2>&1)"
             rc=$?
             set -e
             printf '%s\n' "$out"
