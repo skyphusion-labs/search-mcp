@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-node@v7
         with:
@@ -115,7 +115,7 @@ jobs:
 
       - name: Check out crew-secrets
         if: inputs.publish
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           repository: skyphusion-labs/crew-secrets
           token: ${{ secrets.CREW_SECRETS_ESCROW_TOKEN }}
