@@ -48,8 +48,9 @@ are never a sync source. Shape + operator steps: `docs/skyphusion/OPERATOR.md`.
 
 Prod `targets.json` and deploy/sync creds live outside this public tree. Operator path (shape only
 in public docs): decrypt age escrow under **crew-secrets** `swarm-secrets/search-mcp-targets/`, edit
-additively, re-escrow (prefer crew-secrets `escrow-search-mcp-targets` Action; prove with
-`bash scripts/verify-escrow.sh swarm-secrets/search-mcp-targets`). Public `escrow-targets` workflow
+additively, re-escrow (prefer crew-secrets `escrow-search-mcp-targets` Action; prove from
+a crew-secrets checkout with `bash scripts/verify-escrow.sh swarm-secrets/search-mcp-targets`;
+that script is not in this repo). Public `escrow-targets` workflow
 is prove-only by default. Never put live targets or tokens in a tracked file or chat transcript.
 
 ## Release / tagging
