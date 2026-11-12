@@ -1,8 +1,32 @@
 # Changelog
 
-## Unreleased
+## v0.7.0
 
-- **`search` docs (#116):** the tool description, the `repos`, `path_prefix` and `min_score` parameter text, and the agent skill now state the filter limit. These filters apply after a capped upstream fetch, so a narrow filter can return no results while matches rank deeper. No behavior change.
+MINOR: the public query Worker and the rockenhaus Worker export `SearchEntrypoint`, a named RPC entrypoint (#147). A Worker on the same account can call `search(question)` and receive retrieval chunks without `POST /ask`. The browser route is unchanged (CORS, Turnstile, per-IP rate limit, streaming generation). Callers gain a method, so this is a MINOR and not a PATCH. Also the `search` filter-limit docs, dependency pins, and CI updates on main since v0.6.0.
+
+### Query Worker (`src/index.ts`, #147)
+
+- **Named entrypoint `SearchEntrypoint`.** `search(question)` returns `{ chunks }` from the same `SEARCH` binding `/ask` uses (hybrid, 6 results, query rewrite on). The call is `SEARCH.search`, not `chatCompletions`, so nothing is generated. The caller selects the class with `entrypoint = "SearchEntrypoint"` on its own service binding. Internet `fetch` still hits the default export only. `rockenhaus-search` exports the class because it uses the same main. The MCP Worker does not.
+- **Origin and Turnstile do not apply.** The method has no `Request`. `ASK_LIMITER` still applies, on the fixed key `ask:rpc` shared by every binding caller. A bad call throws `empty_question`, `question_too_long` (over 2000 characters after trim), `rate_limited`, or `search_unavailable`.
+
+### MCP tools
+
+- **`search` docs (#116, #124):** the tool description, the `repos`, `path_prefix` and `min_score` parameter text, and the agent skill now state the filter limit. These filters apply after a capped upstream fetch, so a narrow filter can return no results while matches rank deeper. No behavior change.
+
+### Dependencies
+
+- Lockfile, measured `v0.6.0` to `HEAD`: `@aws-sdk/client-s3` 3.1120.0 to 3.1164.0 (#123, #131, #136, #138, #140, #143); `wrangler` 4.125.0 to 4.158.0 and `@cloudflare/workers-types` 5.20260821.1 to 5.20261107.1 (#121, #130, #134, #137, #139, #141); `vitest` and `@vitest/coverage-istanbul` 4.1.11 to 5.1.0, and their `package.json` ranges `^4.1.10` to `^5.0.3` (#122, #135, #142); `@types/node` 26.4.0 to 26.6.6 (#123, #131, #140). `sharp` stays 0.35.4. `undici` stays 7.29.0. `typescript` stays 7.0.2.
+
+### CI and docs
+
+- npm publish uses trusted publishing (the Actions OIDC token). The workflow no longer reads `NPM_TOKEN`. A version already on the registry is proven by npm refusing to publish over it, after the exchange. The trust probe passes `--ignore-scripts`, because `prepublishOnly` runs before that exchange (#132, #133).
+- The coverage workflow can go red when the suite fails (#126).
+- Third-party actions are pinned to commit SHAs, with the tag kept as a trailing comment (#145), after the `actions/checkout` tag bump (#129).
+- Docs: bump-at-release convention in `CLAUDE.md` (#146). `scripts/verify-escrow.sh` is not in this repo; the proof script lives in crew-secrets (#144).
+
+### Version pin
+
+- `package.json`, `package-lock.json` (both version fields), and `SERVER_INFO` (the MCP `/health` version) move from 0.6.0 to 0.7.0 so the tag cannot lie.
 
 ## v0.6.0
 
