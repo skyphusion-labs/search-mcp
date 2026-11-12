@@ -89,6 +89,23 @@ wrangler secret put MCP_TOKEN -c wrangler.mcp.toml
 wrangler secret put TURNSTILE_SECRET   # optional; skips verification when unset
 ```
 
+### Service binding RPC
+
+`POST /ask` stays the browser route (CORS, Turnstile, per-IP rate limit). A Worker on the same account can retrieve chunks without that route by binding to the named entrypoint `SearchEntrypoint`, exported from `src/index.ts` (the public query Worker and the rockenhaus Worker, which share that file). The MCP Worker does not export it.
+
+The entrypoint is not a URL. Internet `fetch` still hits the default export only. The caller selects the class in its own wrangler config. This Worker's wrangler bindings do not change. `entrypoint` is the caller's service-binding field ([RPC named entrypoints](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/#named-entrypoints)):
+
+```toml
+[[services]]
+binding = "SEARCH_RPC"
+service = "skyphusion-search"   # or rockenhaus-search; a self-host uses its own script name
+entrypoint = "SearchEntrypoint"
+```
+
+`await env.SEARCH_RPC.search(question)` returns `{ chunks }` from the same `SEARCH` binding `/ask` uses. The retrieval options match `/ask` (hybrid, 6 results, query rewrite on). Nothing is generated: the call is `SEARCH.search`, not `chatCompletions`. The question must be a non-empty string of at most 2000 characters after trim, the same bound as `/ask`. A bad call throws `Error` with one of these messages: `empty_question`, `question_too_long`, `rate_limited`, `search_unavailable`.
+
+`ASK_LIMITER` still applies. The key is the fixed string `ask:rpc` for every binding caller. There is no Origin check and no Turnstile check: the method has no HTTP request, and only a Worker whose config names this entrypoint receives a stub.
+
 ### MCP client wiring
 
 ```json

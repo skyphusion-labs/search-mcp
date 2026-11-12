@@ -1,4 +1,5 @@
-import type { Env, AiSearchMessage } from "./env";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import type { AiSearchChunk, AiSearchMessage, AiSearchOptions, Env } from "./env";
 
 const DEFAULT_SYSTEM_PROMPT = [
   "You are a documentation assistant.",
@@ -62,6 +63,28 @@ export function systemPromptFor(env: Env, origin: string): string {
 }
 
 const MAX_QUESTION_LEN = 2000;
+
+// One bucket for every service-binding caller. An RPC call has no client IP,
+// and the key is not taken from the caller, so a binding cannot pick a bucket.
+const SEARCH_RPC_LIMIT_KEY = "ask:rpc";
+
+// Retrieval options /ask passes to chatCompletions. The RPC method passes the
+// same options to SEARCH.search and does not generate.
+function askAiSearchOptions(): AiSearchOptions {
+  return {
+    retrieval: { retrieval_type: "hybrid", max_num_results: 6 },
+    query_rewrite: { enabled: true },
+  };
+}
+
+function questionForRpc(question: unknown): string {
+  if (typeof question !== "string") throw new Error("empty_question");
+  const trimmed = question.trim();
+  if (!trimmed) throw new Error("empty_question");
+  if (trimmed.length > MAX_QUESTION_LEN) throw new Error("question_too_long");
+  return trimmed;
+}
+
 const TURNSTILE_VERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
@@ -167,10 +190,7 @@ async function handleAsk(request: Request, env: Env): Promise<Response> {
       messages,
       model: env.GENERATION_MODEL,
       stream: true,
-      ai_search_options: {
-        retrieval: { retrieval_type: "hybrid", max_num_results: 6 },
-        query_rewrite: { enabled: true },
-      },
+      ai_search_options: askAiSearchOptions(),
     });
   } catch (err) {
     console.log("chatCompletions error", String(err));
@@ -209,3 +229,36 @@ export default {
     return json({ error: "not_found" }, 404);
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Retrieval for a service binding. This class is a named entrypoint, not a
+ * route: public fetch stays on the default export above. A caller selects it
+ * with wrangler `entrypoint = "SearchEntrypoint"` on its service binding.
+ * There is no browser request here, so Origin and Turnstile do not apply.
+ * ASK_LIMITER still applies, on SEARCH_RPC_LIMIT_KEY.
+ *
+ * https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/#named-entrypoints
+ */
+export class SearchEntrypoint extends WorkerEntrypoint<Env> {
+  async search(question: string): Promise<{ chunks: AiSearchChunk[] }> {
+    const q = questionForRpc(question);
+    const { success } = await this.env.ASK_LIMITER.limit({ key: SEARCH_RPC_LIMIT_KEY });
+    if (!success) throw new Error("rate_limited");
+
+    try {
+      const res = await this.env.SEARCH.search({
+        query: q,
+        ai_search_options: askAiSearchOptions(),
+      });
+      if (!Array.isArray(res?.chunks)) {
+        console.log("search rpc error", "chunks missing");
+        throw new Error("search_unavailable");
+      }
+      return { chunks: res.chunks };
+    } catch (err) {
+      if (err instanceof Error && err.message === "search_unavailable") throw err;
+      console.log("search rpc error", String(err));
+      throw new Error("search_unavailable");
+    }
+  }
+}

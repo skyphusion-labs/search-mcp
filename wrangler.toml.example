@@ -29,6 +29,17 @@ ALLOWED_ORIGINS = "https://docs.example.com,https://www.docs.example.com"
 GENERATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # ASSISTANT_SYSTEM_PROMPT = "You are the docs assistant for Example Corp..."
 
+# Named RPC entrypoint SearchEntrypoint is an export of src/index.ts.
+# This Worker does not declare it. A caller on the same account binds to it
+# (production script name: skyphusion-search; rockenhaus script: rockenhaus-search):
+#
+# [[services]]
+# binding = "SEARCH_RPC"
+# service = "search-mcp-query"
+# entrypoint = "SearchEntrypoint"
+#
+# https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/#named-entrypoints
+
 # Optional custom domain (or use workers.dev):
 # [[routes]]
 # pattern = "search.example.com"
