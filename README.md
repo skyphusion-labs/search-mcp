@@ -1,8 +1,11 @@
 # search-mcp
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![Typecheck](https://github.com/skyphusion-labs/search-mcp/actions/workflows/typecheck.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/typecheck.yml)
 [![CI](https://github.com/skyphusion-labs/search-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/ci.yml)
+[![Coverage](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml)
+[![npm](https://img.shields.io/npm/v/@skyphusion/search-mcp.svg)](https://www.npmjs.com/package/@skyphusion/search-mcp)
+
+**Website and docs: [search-mcp.dev](https://search-mcp.dev)**
 
 Open-source toolkit for [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/):
 
@@ -127,10 +130,12 @@ entrypoint = "SearchEntrypoint"
 | Tool | Role |
 | --- | --- |
 | `list_repos` | Exact repo names for filters (`CORPUS_REPOS` or R2 prefixes) |
-| `search` | Hybrid/keyword/vector chunks; optional `repos`, `path_prefix`, `min_score`, `rewrite` |
+| `search` | Hybrid/keyword/vector chunks; optional `repos`, `path_prefix`, `min_score`, `rewrite` (see the filter note below) |
 | `get_file` | Capped R2 read by `repo` + `path` (needs `CORPUS` binding) |
 | `ask` | One grounded answer via chatCompletions + source list |
 | `corpus_status` | Last sync metadata (`_meta/corpus-status.json` from `sync.mjs`) |
+
+The `repos`, `path_prefix` and `min_score` filters apply AFTER a capped upstream fetch (4 times `max_num_results`, at least 20 and at most 50 chunks). A narrow filter can return no results while matching chunks rank deeper. Start with `list_repos`, and widen the query before you conclude that a file is not in the corpus.
 
 Resources: `corpus://catalog`, `corpus://skill`. Prefer **list_repos → search → get_file**; use **ask** when you want prose rather than raw chunks.
 
@@ -319,6 +324,8 @@ Operators building documentation search, agent tooling, or internal knowledge ba
 
 ## Links
 
+- **Website and docs:** [search-mcp.dev](https://search-mcp.dev)
+- **npm:** [@skyphusion/search-mcp](https://www.npmjs.com/package/@skyphusion/search-mcp)
 - **Deploy guide:** [docs/DEPLOY.md](docs/DEPLOY.md)
 - **Live ask UIs:** [skyphusion.net/search](https://skyphusion.net/search/) · [vivijure.com](https://vivijure.com) (ask widget)
 - **Skyphusion Labs:** https://skyphusion.org · **Blog:** https://skyphusion.net · **Org:** https://github.com/skyphusion-labs

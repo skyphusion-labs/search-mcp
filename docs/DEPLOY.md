@@ -126,12 +126,12 @@ See README "Bounding a corpus" and `scripts/targets.json.example`.
 
 ## 8. CI and release
 
-This repo is **public**. GitHub-hosted `ubuntu-latest` runners only (the org fleet pool does
-not accept public-repo jobs).
+This repo is **public**. CI runs on GitHub-hosted `ubuntu-latest` runners only, and a public
+repo never runs jobs on self-hosted hardware.
 
 | Trigger | What runs |
 | --- | --- |
-| PR / push to `main` | `typecheck` (Workers + scripts projects) + `vitest` (+ coverage / CodeQL as configured) |
+| PR / push to `main` | `typecheck` (Workers + scripts projects) + `vitest` in `ci.yml`; `coverage.yml`; CodeQL default setup |
 | Tag `v*` on `main` | After CI: materialize config from secrets, deploy public query + internal MCP + rockenhaus Workers |
 | GitHub Release published | `publish-npm.yml` publishes `@skyphusion/search-mcp` |
 
