@@ -175,6 +175,8 @@ pattern = "search.vivijure.com"
 custom_domain = true
 ```
 
+`src/index.ts` also exports the named entrypoint `SearchEntrypoint` (retrieval only, no `/ask` route). This secret does not change for that. A caller binds with `service = "skyphusion-search"` and `entrypoint = "SearchEntrypoint"`. The rockenhaus script (`rockenhaus-search`, same main) exports the same class. The MCP script does not. Caller shape and why it skips Origin and Turnstile: the README section "Service binding RPC".
+
 ## SKYPHUSION_WRANGLER_MCP_TOML
 
 Shape only (0.5.0+). Live secret also sets `workers_dev = false`, full `CORPUS_REPOS`,
