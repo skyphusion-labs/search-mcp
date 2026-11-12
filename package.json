@@ -4,7 +4,7 @@
   "description": "Bearer-gated MCP server and streaming query Worker over Cloudflare AI Search, plus a git-to-R2 corpus sync toolkit.",
   "license": "AGPL-3.0-only",
   "author": "Conrad Rockenhaus <conrad@skyphusion.org>",
-  "homepage": "https://github.com/skyphusion-labs/search-mcp#readme",
+  "homepage": "https://search-mcp.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/skyphusion-labs/search-mcp.git"
