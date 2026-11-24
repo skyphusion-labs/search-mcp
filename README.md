@@ -5,6 +5,8 @@
 [![Coverage](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml)
 [![npm](https://img.shields.io/npm/v/@skyphusion/search-mcp.svg)](https://www.npmjs.com/package/@skyphusion/search-mcp)
 
+**Status (2026-11-24):** Skyphusion Labs retired its hosted search-mcp workers and corpus sync (#156). The npm package and this repo remain for self-hosters. The old docs site at search-mcp.dev is offline.
+
 **Website and docs: [search-mcp.dev](https://search-mcp.dev)**
 
 Open-source toolkit for [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/):
@@ -58,21 +60,14 @@ npm test
 
 Provision R2 + AI Search, sync your corpus, deploy both Workers. Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md).
 
-## Skyphusion production
+## Hosted Skyphusion status
 
-This repo is the production home for three AI Search surfaces:
-
-| Surface | Host | Worker config |
-| --- | --- | --- |
-| Public docs / marketing | `search.vivijure.com` | secret `SKYPHUSION_WRANGLER_TOML` → `wrangler.toml` at CI |
-| Internal MCP | `search-internal.vivijure.com` | secret `SKYPHUSION_WRANGLER_MCP_TOML` |
-| Rockenhaus court records | `search.rockenhaus.net` | committed `wrangler.rockenhaus.toml` |
+Skyphusion Labs retired its hosted workers and corpus sync on 2026-11-24 (#156).
+Former hosts `search.vivijure.com`, `search-internal.vivijure.com`, and `search.rockenhaus.net` are offline.
+This repo stays as the self-host toolkit and the npm package.
 
 Do not commit `wrangler.toml`, `wrangler.mcp.toml`, or `scripts/targets.json` (gitignored).
-Rockenhaus is the exception: its wrangler file is public and tracked.
-
-- [Operator runbook](docs/skyphusion/OPERATOR.md) -- secrets, topology shape, escrow, reindex
-- [Cutover record (2026-07-08)](docs/skyphusion/CUTOVER.md) -- migration history (historical)
+`wrangler.rockenhaus.toml` remains a public example for a court-record Worker.
 
 ## Workers
 
