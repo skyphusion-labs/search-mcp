@@ -5,6 +5,8 @@
 [![Coverage](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml)
 [![npm](https://img.shields.io/npm/v/@skyphusion/search-mcp.svg)](https://www.npmjs.com/package/@skyphusion/search-mcp)
 
+**Status (2026-11-24):** Skyphusion Labs retired its hosted search-mcp workers and corpus sync (#156). The npm package and this repo remain for self-hosters. The old docs site at search-mcp.dev is offline.
+
 **Website and docs: [search-mcp.dev](https://search-mcp.dev)**
 
 Open-source toolkit for [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/):

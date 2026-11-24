@@ -4,7 +4,9 @@ This file is the guide for any coding agent and any contributor. Follow it.
 
 ## What this project is
 
-search-mcp is the corpus and search service for public repos. It ships a public `/ask` Worker, a bearer-gated MCP Worker, and a court-record Worker. The npm name is `@skyphusion/search-mcp`. Read [README.md](README.md). Self-host steps are in [docs/DEPLOY.md](docs/DEPLOY.md).
+search-mcp is an open-source toolkit for Cloudflare AI Search. The npm name is `@skyphusion/search-mcp`. Read [README.md](README.md). Self-host steps are in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+Skyphusion Labs no longer runs hosted instances of this product (retired 2026-11-24, #156). Do not expect live workers at `search.vivijure.com` or `search-internal.vivijure.com`. Do not add corpus-notify workflows back to other repos.
 
 The version is in `package.json`. See the latest `v*` tag.
 
@@ -36,7 +38,7 @@ npm test
 
 `includePaths` and `excludePaths` can apply to every target. They can also apply to one target. The court-record sync stays on the public mirror paths. Private litigation trees are never a sync source.
 
-Do not commit a live targets file. Do not commit a token. The public escrow workflow proves a restore. It does not write production targets.
+Do not commit a live targets file. Do not commit a token.
 
 ## Release
 
