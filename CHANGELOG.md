@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.1
+
+PATCH: docs and release path only. Product site [search-mcp.dev](https://search-mcp.dev) is live again after an overscoped teardown. npm `homepage` already pointed there; this release republishes so the registry matches. Tag deploy of Skyphusion hosted Workers is removed (#156 retired those Workers).
+
+### Docs and release
+
+- README: drop the false claim that search-mcp.dev is offline. Hosted corpus Workers stay retired.
+- CI: remove the tag-triggered Worker deploy job. A `v*` tag plus a GitHub Release publishes npm only.
+
+### Version pin
+
+- `package.json`, `package-lock.json`, and `SERVER_INFO` move from 0.7.0 to 0.7.1.
+
 ## v0.7.0
 
 MINOR: the public query Worker and the rockenhaus Worker export `SearchEntrypoint`, a named RPC entrypoint (#147). A Worker on the same account can call `search(question)` and receive retrieval chunks without `POST /ask`. The browser route is unchanged (CORS, Turnstile, per-IP rate limit, streaming generation). Callers gain a method, so this is a MINOR and not a PATCH. Also the `search` filter-limit docs, dependency pins, and CI updates on main since v0.6.0.

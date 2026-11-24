@@ -6,7 +6,7 @@ This file is the guide for any coding agent and any contributor. Follow it.
 
 search-mcp is an open-source toolkit for Cloudflare AI Search. The npm name is `@skyphusion/search-mcp`. Read [README.md](README.md). Self-host steps are in [docs/DEPLOY.md](docs/DEPLOY.md).
 
-Skyphusion Labs no longer runs hosted instances of this product (retired 2026-11-24, #156). Do not expect live workers at `search.vivijure.com` or `search-internal.vivijure.com`. Do not add corpus-notify workflows back to other repos.
+Skyphusion Labs no longer runs hosted corpus Workers (retired 2026-11-24, #156). Do not expect live workers at `search.vivijure.com` or `search-internal.vivijure.com`. Do not add corpus-notify workflows back to other repos. The product docs site at https://search-mcp.dev stays live.
 
 The version is in `package.json`. See the latest `v*` tag.
 
@@ -42,9 +42,9 @@ Do not commit a live targets file. Do not commit a token.
 
 ## Release
 
-A `v*` tag deploys three Workers after CI passes. Those Workers are the public query, the MCP server, and the court-record Worker. The tag `vX.Y.Z` must match the version in `package.json`. The workflow refuses a mismatch. Push a tag only when that commit is on `main`. A merge to `main` leaves the live Workers unchanged.
+A version moves only in a release pull request. Feature work does not bump `package.json`. Fix work does not bump `package.json`. The tag `vX.Y.Z` must match the version in `package.json`. Push a tag only when that commit is on `main`.
 
-Publishing a GitHub Release runs [`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml). A version moves only in a release pull request. Feature work does not bump `package.json`. Fix work does not bump `package.json`.
+Publishing a GitHub Release runs [`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml). A `v*` tag no longer deploys Workers. Hosted Skyphusion Workers were retired (#156).
 
 ## Docs
 
