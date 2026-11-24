@@ -1,11 +1,9 @@
 name: ci
 
 # PR + main gate (aviation-grade). Fork PRs run on GitHub-hosted runners without
-# deploy secrets. Production deploy runs ONLY on a pushed version tag (v*), NEVER
-# on a bare merge to main. Cut a SemVer tag to ship:
-#   git tag -a v0.1.0 -m "..." && git push origin v0.1.0
-# GitHub-hosted runners (public repo; org fleet pool does not accept public-repo
-# jobs). Config materialized from GitHub secrets.
+# deploy secrets. Hosted Skyphusion Workers were retired 2026-11-24 (#156). A
+# version tag no longer deploys Workers. Cut a SemVer tag and publish a GitHub
+# Release to ship the npm package (publish-npm.yml).
 
 on:
   push:
@@ -45,67 +43,3 @@ jobs:
       - run: npm test
         env:
           ESCROW_REQUIRE_AGE: "1"
-
-  deploy:
-    needs: ci
-    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'skyphusion-labs/search-mcp'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Assert tag is on main (no prod deploy from an unmerged branch)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::tag $GITHUB_REF_NAME points at $GITHUB_SHA which is not on origin/main; refusing to deploy an unreviewed commit"
-            exit 1
-          fi
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: "22"
-      # fc#864: tag vX.Y.Z must match package.json version X.Y.Z so /health cannot lie.
-      # Route the tag through env (not script interpolation) -- prism publish-npm pattern.
-      - name: Verify tag matches package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          tag="$RELEASE_TAG"
-          tag_version="${tag#v}"
-          pkg_version="$(node -p "require('./package.json').version")"
-          echo "Tag:              $tag (version $tag_version)"
-          echo "package.json ver: $pkg_version"
-          if [ "$tag_version" != "$pkg_version" ]; then
-            echo "::error::tag $tag (version $tag_version) does not match package.json version $pkg_version"
-            exit 1
-          fi
-      - run: npm ci
-      - name: Materialize production config
-        env:
-          SKYPHUSION_WRANGLER_TOML: ${{ secrets.SKYPHUSION_WRANGLER_TOML }}
-          SKYPHUSION_WRANGLER_MCP_TOML: ${{ secrets.SKYPHUSION_WRANGLER_MCP_TOML }}
-          SKYPHUSION_TARGETS_JSON: ${{ secrets.SKYPHUSION_TARGETS_JSON }}
-        run: node scripts/materialize-config.mjs
-      - name: Deploy public query Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run deploy
-      - name: Deploy internal MCP Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run deploy:mcp
-      # rockenhaus: committed wrangler.rockenhaus.toml. skyphusion-search-ci token
-      # holds Zone Read + Workers Routes Write on vivijure.com AND rockenhaus.net
-      # (token policy updated 2026-08-05).
-      - name: Deploy rockenhaus query Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run deploy:rockenhaus
