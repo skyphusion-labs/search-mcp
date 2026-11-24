@@ -148,7 +148,6 @@ Tag must match `package.json` version. Merge alone never deploys. Skyphusion ope
 | `adversarial-audit.yml` | LLM red-team advisory (not a merge gate) |
 | `corpus-sync.yml` | Merge-driven + daily R2 sync and reindex |
 | `corpus-notify.yml` | Template/reference for constellation repos (also `docs/corpus-notify.workflow.yml`) |
-| `escrow-targets.yml` | Prove-only targets escrow on this public repo (publish default off; prefer crew-secrets) |
 | `publish-npm.yml` | Publish `@skyphusion/search-mcp` on GitHub Release |
 
 ## 9. Operator tooling (git clone, not npm)
@@ -160,7 +159,6 @@ simple self-host from the npm package:
 | --- | --- |
 | `materialize-config.mjs` | Write wrangler + targets from CI env secrets |
 | `guard-targets-additive.mjs` | Refuse non-additive `targets.json` edits (mirror-prune safety) |
-| `escrow-targets.mjs` | Age-escrow + restore proof for `SKYPHUSION_TARGETS_JSON` |
 | `corpus-boundary.mjs` | Public-target visibility / restrictedRepos checks (used by sync) |
 
 ## Troubleshooting
