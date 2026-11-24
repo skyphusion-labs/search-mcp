@@ -5,7 +5,7 @@
 [![Coverage](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml/badge.svg)](https://github.com/skyphusion-labs/search-mcp/actions/workflows/coverage.yml)
 [![npm](https://img.shields.io/npm/v/@skyphusion/search-mcp.svg)](https://www.npmjs.com/package/@skyphusion/search-mcp)
 
-**Status (2026-11-24):** Skyphusion Labs retired its hosted search-mcp workers and corpus sync (#156). The npm package and this repo remain for self-hosters. The old docs site at search-mcp.dev is offline.
+**Status (2026-11-24):** Skyphusion Labs retired its hosted corpus workers and sync (#156). The toolkit, npm package, and docs site remain for self-hosters.
 
 **Website and docs: [search-mcp.dev](https://search-mcp.dev)**
 
@@ -62,9 +62,10 @@ Provision R2 + AI Search, sync your corpus, deploy both Workers. Step-by-step: [
 
 ## Hosted Skyphusion status
 
-Skyphusion Labs retired its hosted workers and corpus sync on 2026-11-24 (#156).
+Skyphusion Labs retired its hosted corpus workers and sync on 2026-11-24 (#156).
 Former hosts `search.vivijure.com`, `search-internal.vivijure.com`, and `search.rockenhaus.net` are offline.
 This repo stays as the self-host toolkit and the npm package.
+The product docs site at [search-mcp.dev](https://search-mcp.dev) stays live.
 
 Do not commit `wrangler.toml`, `wrangler.mcp.toml`, or `scripts/targets.json` (gitignored).
 `wrangler.rockenhaus.toml` remains a public example for a court-record Worker.
